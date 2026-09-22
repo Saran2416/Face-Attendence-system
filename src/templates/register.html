@@ -3,155 +3,108 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Register User — BioSecure AI</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://unpkg.com/lucide@latest"></script>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <title>Create User - BioSecure AI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root { --bg: #050505; --panel: #202020; --border: #383838; --muted: #9ca3af; --danger: #f87171; --success: #34d399; }
+    body {
+      min-height: 100vh;
+      overflow-x: hidden;
+      background: radial-gradient(ellipse 46% 30% at 50% -7%, rgba(255,255,255,.25), rgba(140,140,140,.08) 38%, transparent 72%), linear-gradient(180deg, #080808 0%, var(--bg) 45%, #030303 100%);
+      color: #fff;
+      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: -12% 0 auto;
+      height: 52vh;
+      pointer-events: none;
+      background: radial-gradient(ellipse at top center, rgba(255,255,255,.18), rgba(255,255,255,.045) 35%, transparent 68%);
+      filter: blur(18px);
+      animation: glow-breathe 8s ease-in-out infinite alternate;
+    }
+    .auth-page { position: relative; min-height: 100vh; display: grid; place-items: center; padding: 32px 20px; }
+    .auth-shell { width: min(100%, 340px); animation: auth-in .7s cubic-bezier(.22, 1, .36, 1) both; }
+    .brand { text-align: center; margin-bottom: 26px; }
+    .brand-mark {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 44px; height: 44px; margin-bottom: 18px;
+      border: 1px solid rgba(255,255,255,.14); border-radius: 50%;
+      background: rgba(255,255,255,.035);
+    }
+    h1 { font-size: clamp(28px, 7vw, 32px); font-weight: 600; line-height: 1.15; margin-bottom: 10px; letter-spacing: 0; }
+    .brand p { color: var(--muted); font-size: 14px; line-height: 1.55; }
+    .notice {
+      margin-bottom: 16px; padding: 12px 13px; border-radius: 10px; font-size: 13px; line-height: 1.45;
+      border: 1px solid rgba(248,113,113,.26); background: rgba(248,113,113,.08); color: var(--danger);
+    }
+    .notice.success { border-color: rgba(52,211,153,.26); background: rgba(52,211,153,.08); color: var(--success); }
+    form { display: grid; gap: 10px; }
+    .field { position: relative; display: block; }
+    .field input {
+      width: 100%; height: 46px; padding: 0 14px 0 44px; border: 1px solid var(--border); border-radius: 9px;
+      outline: none; background: var(--panel); color: #fff; font: inherit; font-size: 14px;
+      transition: border-color .2s ease, box-shadow .2s ease, background-color .2s ease;
+    }
+    .field input::placeholder { color: #777; }
+    .field input:focus { border-color: #666; background: #222; box-shadow: 0 0 0 3px rgba(255,255,255,.055), 0 0 24px rgba(255,255,255,.04); }
+    .field-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); display: flex; color: #858585; pointer-events: none; }
+    .hint { color: #777; font-size: 12px; line-height: 1.45; margin: -2px 0 4px; }
+    .actions { display: grid; gap: 10px; margin-top: 4px; }
+    .btn, .link-btn {
+      display: inline-flex; align-items: center; justify-content: center; width: 100%; height: 46px; border-radius: 9px;
+      font: inherit; font-size: 14px; font-weight: 600; text-decoration: none; transition: transform .18s ease, background-color .18s ease, border-color .18s ease;
+    }
+    .btn { border: 1px solid #3a3a3a; background: #2b2b2b; color: #fff; cursor: pointer; }
+    .btn:hover { background: #343434; transform: translateY(-1px); }
+    .link-btn { border: 1px solid #2f2f2f; color: #d1d5db; background: transparent; }
+    .link-btn:hover { border-color: #555; color: #fff; background: rgba(255,255,255,.04); transform: translateY(-1px); }
+    @keyframes auth-in { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes glow-breathe { from { opacity: .55; transform: translateY(-8px) scale(.96); } to { opacity: .9; transform: translateY(8px) scale(1.04); } }
+    @media (max-width: 480px) { .auth-page { padding-inline: 5vw; } .auth-shell { width: 90vw; max-width: 340px; } }
+  </style>
 </head>
-<body class="pb-24 md:pb-8 flex flex-col md:flex-row">
-
-  <!-- Desktop Left Sidebar (Desktop Only) -->
-  <aside class="hidden md:flex flex-col fixed top-0 left-0 h-screen w-64 bg-[#0b1326]/75 backdrop-blur-xl border-r border-white/10 p-6 z-50">
-    <div class="flex items-center gap-3 mb-8">
-      <i data-lucide="scan-face" class="w-8 h-8 text-blue-500"></i>
-      <h1 class="font-geist text-xl font-bold text-blue-400 tracking-tight">BioSecure AI</h1>
-    </div>
-
-    <div class="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 rounded-full border border-emerald-500/20 mb-8 self-start">
-      <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-      <span class="font-geist text-xs font-semibold text-emerald-400 uppercase tracking-wider">SYSTEM LIVE</span>
-    </div>
-
-    <nav class="flex-1 flex flex-col gap-2">
-      <a href="/" class="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all text-gray-300 hover:bg-white/5">
-        <i data-lucide="home" class="w-5 h-5"></i>
-        <span>Home</span>
-      </a>
-      <a href="/viewer" class="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all text-gray-300 hover:bg-white/5">
-        <i data-lucide="bar-chart-2" class="w-5 h-5"></i>
-        <span>View Records</span>
-      </a>
-      <a href="/students" class="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all text-gray-300 hover:bg-white/5">
-        <i data-lucide="users" class="w-5 h-5"></i>
-        <span>All Students</span>
-      </a>
-      <a href="/add_student" class="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all text-gray-300 hover:bg-white/5">
-        <i data-lucide="user-plus" class="w-5 h-5"></i>
-        <span>Add Student</span>
-      </a>
-      {% if session_is_admin %}
-      <a href="/admin" class="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all bg-blue-500/10 text-blue-400 border border-blue-500/20">
-        <i data-lucide="settings" class="w-5 h-5"></i>
-        <span>Admin Portal</span>
-      </a>
-      {% endif %}
-    </nav>
-
-    <div class="pt-6 border-t border-white/10 flex flex-col gap-4">
-      <div class="flex flex-col">
-        <span class="text-xs text-gray-500">Logged in as</span>
-        <span class="text-sm font-semibold text-gray-200">{{ session_username }}</span>
-      </div>
-      <a href="/logout" class="btn-danger-glass w-full py-2.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-2">
-        <i data-lucide="log-out" class="w-4 h-4"></i> Logout
-      </a>
-    </div>
-  </aside>
-
-  <!-- TopAppBar (Mobile Only) -->
-  <header class="fixed top-0 left-0 w-full z-50 flex md:hidden justify-between items-center px-6 py-3 bg-[#0b1326]/70 backdrop-blur-xl border-b border-white/10 shadow-lg">
-    <div class="flex items-center gap-3">
-      <i data-lucide="scan-face" class="w-8 h-8 text-blue-500"></i>
-      <h1 class="font-geist text-xl font-bold text-blue-400 tracking-tight">BioSecure AI</h1>
-    </div>
-    
-    <div class="flex items-center gap-4">
-      <a href="/logout" class="btn-danger-glass px-4 py-2 rounded-lg text-xs font-semibold flex items-center gap-2">
-        <i data-lucide="log-out" class="w-4 h-4"></i> Logout
-      </a>
-    </div>
-  </header>
-
-  <!-- BottomNavBar (Mobile Only) -->
-  <nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 pb-safe md:hidden h-16 bg-[#131b2e]/85 backdrop-blur-lg border-t border-white/10 shadow-2xl">
-    <a class="flex flex-col items-center justify-center text-xs font-medium transition-all text-gray-400 hover:text-blue-300" href="/">
-      <i data-lucide="home" class="w-5 h-5 mb-0.5"></i>
-      <span>Home</span>
-    </a>
-    <a class="flex flex-col items-center justify-center text-xs font-medium transition-all text-gray-400 hover:text-blue-300" href="/viewer">
-      <i data-lucide="bar-chart-2" class="w-5 h-5 mb-0.5"></i>
-      <span>Records</span>
-    </a>
-    <a class="flex flex-col items-center justify-center text-xs font-medium transition-all text-gray-400 hover:text-blue-300" href="/students">
-      <i data-lucide="users" class="w-5 h-5 mb-0.5"></i>
-      <span>Students</span>
-    </a>
-    <a class="flex flex-col items-center justify-center text-xs font-medium transition-all text-gray-400 hover:text-blue-300" href="/add_student">
-      <i data-lucide="user-plus" class="w-5 h-5 mb-0.5"></i>
-      <span>Add</span>
-    </a>
-    {% if session_is_admin %}
-    <a class="flex flex-col items-center justify-center text-xs font-medium transition-all text-blue-400" href="/admin">
-      <i data-lucide="settings" class="w-5 h-5 mb-0.5"></i>
-      <span>Admin</span>
-    </a>
-    {% endif %}
-  </nav>
-
-  <main class="w-full flex-1 p-4 sm:p-6 max-w-lg mx-auto mt-24 md:mt-8 md:pl-72">
-    <div class="glass-panel shadow-2xl p-5 sm:p-8 rounded-2xl inner-glow">
-      
-      <div class="flex items-center gap-2 mb-6 border-b border-white/10 pb-4">
-        <i data-lucide="user-plus" class="w-6 h-6 text-blue-500"></i>
-        <h2 class="text-xl font-bold font-geist text-white">Create System User</h2>
-      </div>
-
-      {% if error %}
-      <div class="mb-4 p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-400 text-sm flex items-center gap-2">
-        <i data-lucide="alert-triangle" class="w-5 h-5"></i>
-        {{ error }}
-      </div>
-      {% endif %}
-
-      {% if success %}
-      <div class="mb-4 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 text-sm flex items-center gap-2">
-        <i data-lucide="check" class="w-5 h-5"></i>
-        {{ success }}
-      </div>
-      {% endif %}
-
-      <form action="/register" method="POST" class="space-y-5">
-        <div>
-          <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Username</label>
-          <input name="username" type="text" required placeholder="e.g. jdoe"
-            class="input-dark-glass w-full rounded-lg px-4 py-3 text-sm">
+<body>
+  <main class="auth-page">
+    <section class="auth-shell" aria-labelledby="register-title">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M19 8v6" /><path d="M22 11h-6" />
+          </svg>
         </div>
+        <h1 id="register-title">Welcome to BioSecure AI</h1>
+        <p>Create a secure attendance dashboard user.</p>
+      </div>
 
-        <div>
-          <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Email Address</label>
-          <input name="email" type="email" required placeholder="e.g. john@example.com"
-            class="input-dark-glass w-full rounded-lg px-4 py-3 text-sm">
-        </div>
+      {% if error %}<div class="notice" role="alert">{{ error }}</div>{% endif %}
+      {% if success %}<div class="notice success" role="status">{{ success }}</div>{% endif %}
 
-        <div>
-          <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Password</label>
-          <input name="password" type="password" required minlength="8" placeholder="••••••••"
-            class="input-dark-glass w-full rounded-lg px-4 py-3 text-sm">
-          <p class="text-gray-500 text-xs mt-1.5 font-geist">Must be at least 8 characters long.</p>
-        </div>
-
-        <div class="flex gap-3 pt-4 border-t border-white/10">
-          <button type="submit" class="btn-primary-glass px-6 py-2.5 rounded-lg text-sm font-semibold flex-1">Create User Account</button>
-          <a href="/admin/users" class="btn-secondary-glass px-6 py-2.5 rounded-lg text-sm font-semibold flex-1 text-center">Cancel</a>
+      <form action="/register" method="POST">
+        <label class="field">
+          <span class="field-icon" aria-hidden="true"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg></span>
+          <input name="username" type="text" required placeholder="Username" autocomplete="username">
+        </label>
+        <label class="field">
+          <span class="field-icon" aria-hidden="true"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2" /><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" /></svg></span>
+          <input name="email" type="email" required placeholder="Enter your email" autocomplete="email">
+        </label>
+        <label class="field">
+          <span class="field-icon" aria-hidden="true"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg></span>
+          <input name="password" type="password" required minlength="8" placeholder="Password" autocomplete="new-password">
+        </label>
+        <p class="hint">Must be at least 8 characters long.</p>
+        <div class="actions">
+          <button type="submit" class="btn">Create User Account</button>
+          <a href="/admin/users" class="link-btn">Cancel</a>
         </div>
       </form>
-    </div>
+    </section>
   </main>
-
-  <script>
-    lucide.createIcons();
-  </script>
   <script src="{{ url_for('static', filename='js/offline-detector.js') }}"></script>
 </body>
 </html>
-
