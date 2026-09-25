@@ -35,11 +35,23 @@ def reload_face_cache() -> int:
     with _cache_lock:
         try:
             logger.info("Initializing/Reloading in-memory face embedding cache...")
-            response = supabase_admin.table('students') \
-                .select('id, name, program, branch, enrollment_year, academic_year, embedding') \
-                .execute()
-            
-            rows = response.data or []
+            try:
+                response = supabase_admin.table('students') \
+                    .select('id, name, program, branch, enrollment_year, academic_year, embedding') \
+                    .execute()
+                
+                rows = response.data or []
+            except Exception as table_error:
+                logger.warning(
+                    "Could not load students table (may not be initialized yet): %s. "
+                    "Cache will start empty. Please run setup_database.py to initialize the schema.",
+                    table_error
+                )
+                _embeddings_matrix = None
+                _student_ids = []
+                _student_metadata = {}
+                _is_initialized = True
+                return 0
             new_ids: List[str] = []
             new_meta: Dict[str, Dict[str, Any]] = {}
             emb_list: List[np.ndarray] = []

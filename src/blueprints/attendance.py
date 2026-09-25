@@ -204,7 +204,25 @@ def _update_drift(student_id: str, cosine_sim: float, pose_yaw: float, pose_pitc
 
 @attendance_bp.route('/')
 def index():
-    return render_template('index.html')
+    from flask import session
+    import logging
+    logger = logging.getLogger(__name__)
+    # Always show home page for authenticated users, landing for others
+    if 'logged_in' in session:
+        logger.info("USER LOGGED IN - RENDERING dashboard_new.html")
+        return render_template('dashboard_new.html')
+    logger.info("USER NOT LOGGED IN - RENDERING landing.html")
+    return render_template('landing.html')
+
+
+@attendance_bp.route('/dashboard')
+def dashboard():
+    """Dashboard page for logged-in users"""
+    from flask import session
+    if 'logged_in' not in session:
+        from flask import redirect, url_for
+        return redirect(url_for('auth.login'))
+    return render_template('home.html')
 
 
 @attendance_bp.route('/viewer')

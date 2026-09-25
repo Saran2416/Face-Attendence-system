@@ -477,6 +477,7 @@
     .delay-2 { animation-delay: 0.2s; }
     .delay-3 { animation-delay: 0.3s; }
   </style>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/home-theme.css') }}">
 </head>
 <body>
   <div class="page-container">
@@ -529,7 +530,7 @@
           <h2>Mark Attendance</h2>
           <p>Upload a classroom photo or capture a live group image to instantly identify and mark all present students in the system.</p>
           <div style="display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;">
-            <a href="/upload" class="btn-primary">
+            <a href="/" class="btn-primary">
               <i data-lucide="camera" style="width: 18px; height: 18px;"></i>
               <span>Start Scanning</span>
             </a>

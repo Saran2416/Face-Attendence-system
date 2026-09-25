@@ -83,8 +83,9 @@ def create_app() -> Flask:
     try:
         from src.utils.face_cache import reload_face_cache
         reload_face_cache()
+        logger.info("Face embedding cache initialized successfully.")
     except Exception as e:
-        logger.warning("Initial face cache pre-load skipped: %s", e)
+        logger.warning("Face cache pre-load skipped (database may not be initialized): %s. The application will work but face matching will be slower.", e)
 
 
     # ------------------------------------------------------------------
@@ -127,6 +128,23 @@ def create_app() -> Flask:
     # Request hooks
     # ------------------------------------------------------------------
 
+    @app.after_request
+    def disable_cache(response):
+        """Apply the shared UI theme and disable caching."""
+        if response.content_type.startswith("text/html"):
+            html = response.get_data(as_text=True)
+            theme_link = (
+                '<link rel="stylesheet" '
+                'href="/static/css/home-theme.css">'
+            )
+            if "home-theme.css" not in html and "</head>" in html:
+                response.set_data(html.replace("</head>", f"  {theme_link}\n</head>", 1))
+
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        return response
+
     @app.before_request
     def configure_cookies_and_require_login():
         """Configure session cookie security for ngrok/HTTPS and check auth."""
@@ -140,7 +158,7 @@ def create_app() -> Flask:
             app.config['SESSION_COOKIE_SECURE'] = False
             app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
-        public_paths = {"/login", "/favicon.ico", "/healthz", "/auth/callback"}
+        public_paths = {"/", "/login", "/favicon.ico", "/healthz", "/auth/callback"}
         if (
             request.path.startswith("/static/")
             or request.path.startswith("/login/oauth/")
