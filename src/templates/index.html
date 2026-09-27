@@ -8,9 +8,120 @@
   <script src="https://unpkg.com/lucide@latest"></script>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
   <style>
-    /* Hide the default file input entirely */
     #nativeCameraInput, #galleryInput {
         display: none;
+    }
+
+    .attendance-workspace {
+      width: 100%;
+      max-width: 760px;
+      margin: 0 auto;
+    }
+    .attendance-header {
+      margin-bottom: 32px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid #262626;
+    }
+    .attendance-header h2 {
+      font-size: 26px;
+      line-height: 1.2;
+      font-weight: 650;
+    }
+    .attendance-header p {
+      margin-top: 8px;
+      color: #a3a3a3;
+      font-size: 14px;
+    }
+    .form-section {
+      padding: 0 0 28px;
+      margin-bottom: 28px;
+      border-bottom: 1px solid #262626;
+    }
+    .field-label {
+      display: block;
+      margin-bottom: 9px;
+      color: #d4d4d4;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .mode-control {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px;
+      padding: 4px;
+      background: #0a0a0a;
+      border: 1px solid #292929;
+      border-radius: 7px;
+    }
+    .mode-option {
+      min-height: 42px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      border-radius: 5px;
+      color: #a3a3a3;
+      font-size: 13px;
+      font-weight: 600;
+      transition: background-color .15s ease, color .15s ease;
+    }
+    .mode-option:hover { color: #fff; }
+    .mode-option.is-active {
+      background: #242424 !important;
+      color: #fff !important;
+      box-shadow: inset 0 0 0 1px #333;
+    }
+    .mode-meta {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      margin-top: 9px;
+      color: #8f8f8f;
+      font-size: 12px;
+    }
+    .mode-status {
+      flex: none;
+      color: #d4d4d4;
+      font-weight: 600;
+    }
+    .source-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .source-button {
+      min-height: 74px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px 16px;
+      text-align: left;
+      background: #0d0d0d !important;
+      border: 1px solid #2b2b2b !important;
+      border-radius: 7px !important;
+      transition: background-color .15s ease, border-color .15s ease;
+    }
+    .source-button:hover {
+      background: #151515 !important;
+      border-color: #454545 !important;
+    }
+    .source-button i { flex: none; color: #d4d4d4 !important; }
+    .source-title { display: block; color: #fff; font-size: 14px; font-weight: 600; }
+    .source-detail { display: block; margin-top: 2px; color: #8f8f8f; font-size: 12px; }
+    .attendance-submit {
+      min-height: 46px;
+      border-radius: 6px !important;
+      font-size: 14px;
+      font-weight: 650;
+      transform: none !important;
+      box-shadow: none !important;
+    }
+    .attendance-submit:disabled { background: #171717 !important; color: #737373 !important; }
+    @media (max-width: 639px) {
+      .attendance-header { margin-bottom: 24px; }
+      .attendance-header h2 { font-size: 23px; }
+      .source-grid { grid-template-columns: 1fr; }
+      .mode-meta { flex-direction: column-reverse; gap: 5px; }
     }
   </style>
 </head>
@@ -104,91 +215,76 @@
     {% endif %}
   </nav>
 
-  <main class="w-full flex-1 p-4 sm:p-6 max-w-4xl mx-auto mt-24 md:mt-8 md:pl-72">
-    
-    <div class="glass-panel p-6 sm:p-10 rounded-3xl max-w-2xl mx-auto inner-glow shadow-2xl relative overflow-hidden">
-      <!-- Glow effect behind container -->
-      <div class="absolute -top-24 -left-24 w-48 h-48 rounded-full bg-blue-500/10 blur-3xl pointer-events-none"></div>
-      <div class="absolute -bottom-24 -right-24 w-48 h-48 rounded-full bg-indigo-500/10 blur-3xl pointer-events-none"></div>
-
-      <div class="flex flex-col items-center mb-8 relative z-10">
-        <div class="relative w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-500 to-indigo-600 flex items-center justify-center mb-4 shadow-lg shadow-blue-500/25">
-          <div class="absolute inset-0 rounded-2xl bg-blue-400 animate-pulse opacity-30"></div>
-          <i data-lucide="scan" class="w-8 h-8 text-white relative z-10"></i>
-        </div>
-        <h2 class="text-3xl text-center font-geist font-extrabold text-slate-900 tracking-tight">Mark Attendance</h2>
-        <p class="text-sm text-slate-500 text-center mt-1.5 max-w-md">Instantly verify identity and record presence using AI-powered face recognition.</p>
+  <main class="w-full flex-1 px-5 py-8 sm:px-8 max-w-5xl mx-auto mt-20 md:mt-0 md:pl-72">
+    <div class="attendance-workspace">
+      <div class="attendance-header">
+        <h2>Mark attendance</h2>
+        <p>Select the class type, add a lecture name, then choose a photo source.</p>
       </div>
 
-      <form id="uploadForm" class="space-y-6 mt-4 relative z-10">
+      <form id="uploadForm">
         
         <!-- SESSION DETAILS -->
-        <div class="space-y-5">
+        <div class="form-section space-y-5">
             <!-- Mode Toggle Switch -->
             <div>
-                <div class="flex items-center justify-between mb-2">
-                    <label class="text-xs font-bold text-gray-400 uppercase tracking-wider">Attendance Mode</label>
-                    <span id="modeBadge" class="text-[10px] font-semibold px-2.5 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">Standard Focus</span>
-                </div>
-                <div class="p-1 bg-[#0b1326]/80 rounded-2xl border border-white/10 flex relative shadow-inner">
+                <label class="field-label">Class type</label>
+                <div class="mode-control">
                     <input type="hidden" name="is_combined_class" id="isCombinedClassInput" value="false">
                     
                     <button type="button" id="btnSeparateClass" onclick="setAttendanceMode(false)"
-                        class="flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all duration-300 flex items-center justify-center gap-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-md">
+                        class="mode-option is-active">
                         <i data-lucide="user-check" class="w-4 h-4"></i>
                         <span>Separate Class</span>
                     </button>
 
                     <button type="button" id="btnCombinedClass" onclick="setAttendanceMode(true)"
-                        class="flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all duration-300 flex items-center justify-center gap-2 text-gray-400 hover:text-white">
+                        class="mode-option">
                         <i data-lucide="layers" class="w-4 h-4"></i>
                         <span>Combined Class</span>
                     </button>
                 </div>
-                <p id="modeDescription" class="text-[11px] text-gray-400 mt-2 px-1 flex items-center gap-1.5">
-                    <i data-lucide="info" class="w-3.5 h-3.5 text-blue-400 flex-shrink-0"></i>
-                    <span>Records attendance for the primary auto-detected class roster.</span>
-                </p>
+                <div class="mode-meta">
+                  <p id="modeDescription">Uses the primary detected class roster.</p>
+                  <span id="modeBadge" class="mode-status">Single roster</span>
+                </div>
             </div>
 
             <div>
-                <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">Lecture Name</label>
+                <label class="field-label">Lecture name <span class="font-normal text-gray-500">(optional)</span></label>
                 <div class="relative">
                     <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
                         <i data-lucide="book-open" class="w-4 h-4"></i>
                     </div>
-                    <input type="text" name="lecture" placeholder="e.g. CS101 (Optional)" class="input-dark-glass w-full rounded-xl pl-10 pr-4 py-3 text-sm font-medium"/>
+                    <input type="text" name="lecture" placeholder="For example, CS101" class="input-dark-glass w-full rounded-md pl-10 pr-4 py-3 text-sm font-medium"/>
                 </div>
             </div>
         </div>
 
         <!-- CAMERA ACTIONS -->
-        <div class="pt-6 border-t border-white/15 mt-6">
-            <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Input Method</label>
+        <div class="form-section">
+            <label class="field-label">Photo source</label>
             
-            <div class="grid grid-cols-2 gap-4">
+            <div class="source-grid">
                 <!-- Native Camera Trigger (Mobile Only) -->
                 <button type="button" onclick="document.getElementById('nativeCameraInput').click()" 
-                        class="flex sm:hidden flex-col items-center justify-center gap-2 py-5 bg-gradient-to-b from-blue-500/10 to-blue-500/5 hover:from-blue-500/15 hover:to-blue-500/10 border border-blue-500/30 rounded-2xl hover:border-blue-500/50 hover:shadow-lg hover:shadow-blue-500/5 transition-all duration-300 group">
-                    <i data-lucide="camera" class="w-7 h-7 text-blue-500 group-hover:scale-110 transition-transform duration-200"></i>
-                    <span class="text-sm font-bold text-slate-800">Mobile Camera</span>
-                    <span class="text-[10px] text-slate-500 font-medium">Use device lens</span>
+                        class="source-button sm:hidden">
+                    <i data-lucide="camera" class="w-5 h-5"></i>
+                    <span><span class="source-title">Take a photo</span><span class="source-detail">Use this device's camera</span></span>
                 </button>
                 
                 <!-- Desktop Webcam Trigger (Desktop/Tablet Only) -->
                 <button type="button" id="openWebcamBtn"
-                        class="hidden sm:flex flex-col items-center justify-center gap-2 py-5 bg-gradient-to-b from-blue-500/10 to-blue-500/5 hover:from-blue-500/15 hover:to-blue-500/10 border border-blue-500/30 rounded-2xl hover:border-blue-500/50 hover:shadow-lg hover:shadow-blue-500/5 transition-all duration-300 group">
-                    <i data-lucide="monitor-play" class="w-7 h-7 text-blue-500 group-hover:scale-110 transition-transform duration-200"></i>
-                    <span class="text-sm font-bold text-slate-800">PC Webcam</span>
-                    <span class="text-[10px] text-slate-500 font-medium">Scan live feed</span>
+                        class="source-button hidden sm:flex">
+                    <i data-lucide="camera" class="w-5 h-5"></i>
+                    <span><span class="source-title">Use webcam</span><span class="source-detail">Capture a classroom image</span></span>
                 </button>
 
                 <!-- Gallery Trigger (Always visible) -->
                 <button type="button" onclick="document.getElementById('galleryInput').click()" 
-                        class="flex flex-col items-center justify-center gap-2 py-5 bg-gradient-to-b from-white/10 to-white/5 hover:from-white/15 hover:to-white/10 border border-white/10 rounded-2xl hover:border-blue-500/30 hover:shadow-lg transition-all duration-300 group">
-                    <i data-lucide="image-plus" class="w-7 h-7 text-gray-500 group-hover:scale-110 transition-transform duration-200"></i>
-                    <span class="text-sm font-bold text-slate-800">Upload Files</span>
-                    <span class="text-[10px] text-slate-500 font-medium">Image references</span>
+                        class="source-button">
+                    <i data-lucide="upload" class="w-5 h-5"></i>
+                    <span><span class="source-title">Choose files</span><span class="source-detail">Select one or more images</span></span>
                 </button>
             </div>
 
@@ -222,14 +318,14 @@
         <!-- PREVIEWS -->
         <div class="pt-2">
             <div id="previewBox" class="hidden grid grid-cols-4 sm:grid-cols-5 gap-3"></div>
-            <p id="previewHint" class="text-xs text-center text-gray-400 mt-2 font-medium">No images selected</p>
+            <p id="previewHint" class="text-xs text-gray-400 mt-3">No images selected</p>
         </div>
 
         <!-- SUBMIT -->
-        <div class="pt-6 border-t border-white/15">
+        <div>
             <button type="submit" id="submitBtn" disabled
-            class="w-full bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white py-4 rounded-xl font-bold transition-all duration-300 flex items-center justify-center gap-2.5 shadow-lg shadow-blue-500/20 hover:shadow-xl hover:shadow-blue-600/30 transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none">
-            <i data-lucide="scan-line" class="w-5 h-5"></i>
+            class="attendance-submit btn-primary-glass w-full flex items-center justify-center gap-2 disabled:cursor-not-allowed">
+            <i data-lucide="check" class="w-4 h-4"></i>
             <span id="submitBtnText">Scan & Mark Present</span>
             </button>
         </div>
@@ -257,21 +353,21 @@
     hiddenInput.value = isCombined ? "true" : "false";
 
     if (isCombined) {
-      btnSep.className = "flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all duration-300 flex items-center justify-center gap-2 text-gray-400 hover:text-white";
-      btnComb.className = "flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all duration-300 flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-500/25";
+      btnSep.className = "mode-option";
+      btnComb.className = "mode-option is-active";
       
-      badge.textContent = "Multi-Group Mode";
-      badge.className = "text-[10px] font-semibold px-2.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 animate-pulse";
+      badge.textContent = "All rosters";
+      badge.className = "mode-status";
 
-      desc.innerHTML = `<i data-lucide="layers" class="w-3.5 h-3.5 text-purple-400 flex-shrink-0"></i><span>Marks attendance for <strong>ALL present students</strong> across all branches & batches attending together.</span>`;
+      desc.textContent = "Checks students across branches and batches.";
     } else {
-      btnComb.className = "flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all duration-300 flex items-center justify-center gap-2 text-gray-400 hover:text-white";
-      btnSep.className = "flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all duration-300 flex items-center justify-center gap-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-md";
+      btnComb.className = "mode-option";
+      btnSep.className = "mode-option is-active";
 
-      badge.textContent = "Standard Focus";
-      badge.className = "text-[10px] font-semibold px-2.5 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20";
+      badge.textContent = "Single roster";
+      badge.className = "mode-status";
 
-      desc.innerHTML = `<i data-lucide="info" class="w-3.5 h-3.5 text-blue-400 flex-shrink-0"></i><span>Records attendance for the primary auto-detected class roster.</span>`;
+      desc.textContent = "Uses the primary detected class roster.";
     }
     lucide.createIcons();
   }
@@ -520,31 +616,24 @@
     submitBtn.innerHTML = `<i data-lucide="loader-2" class="w-5 h-5 animate-spin"></i><span>Processing...</span>`;
     lucide.createIcons();
     
-    // Premium Interactive Loading Card
+    // Processing status
     resultBox.innerHTML = `
-      <div class="glass-panel p-8 rounded-2xl text-center border border-blue-500/20 max-w-xl mx-auto mt-6 animate-fade-in relative overflow-hidden">
-        <div class="scan-line absolute left-0 w-full z-10"></div>
-        <div class="relative w-20 h-20 mx-auto mb-6 flex items-center justify-center bg-blue-500/10 rounded-full border border-blue-500/30">
-          <i data-lucide="scan-face" class="w-10 h-10 text-blue-400 animate-pulse"></i>
-        </div>
-        <h3 class="text-lg font-bold text-white font-geist mb-2">Analyzing Face Biometrics</h3>
-        <p id="loadingStatusText" class="text-sm text-blue-400 font-medium animate-pulse">Extracting facial landmarks...</p>
-        <div class="mt-6 flex justify-center gap-1.5">
-          <span class="w-2.5 h-2.5 rounded-full bg-blue-500 animate-bounce" style="animation-delay: 0.1s"></span>
-          <span class="w-2.5 h-2.5 rounded-full bg-blue-500 animate-bounce" style="animation-delay: 0.3s"></span>
-          <span class="w-2.5 h-2.5 rounded-full bg-blue-500 animate-bounce" style="animation-delay: 0.5s"></span>
+      <div class="mt-6 flex items-center gap-3 border-t border-white/10 py-5 animate-fade-in">
+        <i data-lucide="loader-circle" class="w-5 h-5 animate-spin text-gray-300"></i>
+        <div>
+          <h3 class="text-sm font-semibold text-white">Processing attendance</h3>
+          <p id="loadingStatusText" class="mt-1 text-xs text-gray-400">Reading the selected images...</p>
         </div>
       </div>
     `;
     lucide.createIcons();
 
     const statusMessages = [
-        "Detecting face bounding boxes...",
-        "Normalizing color channels & alignments...",
-        "Generating 512-dimensional face embeddings...",
-        "Performing pgvector cosine distance match...",
-        "Validating matches against student directory...",
-        "Finalizing class register report..."
+        "Finding faces in the selected images...",
+        "Checking image quality...",
+        "Matching students...",
+        "Updating the attendance register...",
+        "Preparing the results..."
     ];
     let msgIdx = 0;
     window.currentStatusInterval = setInterval(() => {
