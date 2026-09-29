@@ -186,3 +186,27 @@ def add_student_to_cache(student_id: str, name: str, program: str, branch: str, 
             'academic_year': academic_year
         }
         logger.info("Added/updated student %s in memory face cache (Total: %d).", sid_clean, len(_student_ids))
+
+
+def remove_student_from_cache(student_id: str) -> bool:
+    """Evict a student from the in-memory matrix. Returns True if removed."""
+    global _student_ids, _student_metadata, _embeddings_matrix
+
+    with _cache_lock:
+        sid_clean = str(student_id).strip()
+        if sid_clean not in _student_ids:
+            _student_metadata.pop(sid_clean, None)
+            return False
+        idx = _student_ids.index(sid_clean)
+        _student_ids.pop(idx)
+        _student_metadata.pop(sid_clean, None)
+        try:
+            if _embeddings_matrix is not None:
+                if len(_student_ids) == 0:
+                    _embeddings_matrix = None
+                else:
+                    _embeddings_matrix = np.delete(_embeddings_matrix, idx, axis=0).astype(np.float32)
+        except Exception as err:
+            logger.warning("Face cache eviction matrix error for %s: %s", sid_clean, err)
+        logger.info("Removed student %s from memory face cache (Total: %d).", sid_clean, len(_student_ids))
+        return True

@@ -292,6 +292,18 @@
   let rawStudentsData = [];
   let todayFilterActive = false;
 
+  // Escape helpers: prevent quote-breakage and stored-XSS in dynamic HTML
+  function escHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function escSq(s) {
+    return String(s ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  }
+  function escOpt(s) {
+    return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function safeLucide() { try { if (window.lucide) lucide.createIcons(); } catch (_) {} }
+
   // Toggle between matrix view and raw logs view
   $('#tabMatrixBtn').click(function() {
       $(this).removeClass('text-gray-400 hover:text-gray-200 border-white/10').addClass('border-blue-500/30 bg-blue-500/10 text-blue-400');
@@ -311,7 +323,7 @@
   });
 
   $(document).ready(function () {
-    lucide.createIcons();
+    safeLucide();
 
     attendanceTable = $('#attendanceTable').DataTable({
       ajax: {
@@ -348,7 +360,7 @@
                         label = 'Absent';
                     }
                     let nextStatus = (data === 'Present' || data === 'Already Marked') ? 'Absent' : 'Present';
-                    return `<button type="button" onclick="toggleLogStatus('${row[0]}', '${row[7]}', '${row[6]}', '${nextStatus}', this)" title="Click to toggle status" class="transform hover:scale-105 active:scale-95 transition-all"><span class="${className}">${label}</span></button>`;
+                    return `<button type="button" onclick="toggleLogStatus('${escSq(row[0])}', '${escSq(row[7])}', '${escSq(row[6])}', '${nextStatus}', this)" title="Click to toggle status" class="transform hover:scale-105 active:scale-95 transition-all"><span class="${className}">${escHtml(label)}</span></button>`;
                 }
                 return data;
             }
@@ -383,6 +395,7 @@
             (acadData.programs || []).forEach(p => { if (p) programSet.add(p.toString().trim()); });
             (acadData.branches || []).forEach(b => { if (b) branchSet.add(b.toString().trim()); });
             (acadData.years || []).forEach(y => { if (y) batchSet.add(y.toString().trim()); });
+            (acadData.lectures || []).forEach(l => { if (l) lectureSet.add(l.toString().trim()); });
         } catch (err) {
             console.error("Failed to read academic options:", err);
         }
@@ -424,18 +437,18 @@
         $("#matrixBatchFilter").html('<option value="">All Batches</option>');
 
         lectureSet.forEach(l => {
-            $("#lectureFilter").append(`<option value="${l}">${l}</option>`);
-            $("#matrixLectureFilter").append(`<option value="${l}">${l}</option>`);
+            $("#lectureFilter").append(`<option value="${escOpt(l)}">${escHtml(l)}</option>`);
+            $("#matrixLectureFilter").append(`<option value="${escOpt(l)}">${escHtml(l)}</option>`);
         });
         programSet.forEach(p => {
-            $("#matrixProgramFilter").append(`<option value="${p}">${p}</option>`);
+            $("#matrixProgramFilter").append(`<option value="${escOpt(p)}">${escHtml(p)}</option>`);
         });
         branchSet.forEach(b => {
-            $("#matrixBranchFilter").append(`<option value="${b}">${b}</option>`);
+            $("#matrixBranchFilter").append(`<option value="${escOpt(b)}">${escHtml(b)}</option>`);
         });
         Array.from(batchSet).sort((a, b) => b - a).forEach(y => {
-            $("#batchFilter").append(`<option value="${y}">${y}</option>`);
-            $("#matrixBatchFilter").append(`<option value="${y}">Batch ${y}</option>`);
+            $("#batchFilter").append(`<option value="${escOpt(y)}">${escHtml(y)}</option>`);
+            $("#matrixBatchFilter").append(`<option value="${escOpt(y)}">Batch ${escHtml(y)}</option>`);
         });
 
         // Auto-select the most recent lecture, program, and branch on initial load
@@ -514,7 +527,7 @@
             filtered = filtered.filter(r => (r[4] || "").toString() === selectedBatch.toString());
         }
         if (selectedDate) {
-            filtered = filtered.filter(r => r[6].startsWith(selectedDate));
+            filtered = filtered.filter(r => (r[6] || "").startsWith(selectedDate));
         }
 
         // Find unique timestamps and sort them in reverse chronological order (newest first)
@@ -558,13 +571,13 @@
         `;
         timestamps.forEach(ts => {
             const sessionLec = (filtered.find(r => r[6] === ts) || [])[7] || selectedLec || 'Session';
-            const parts = ts.split(' ');
+            const parts = String(ts || '').split(' ');
             const dateStr = parts[0] || '';
             const timeStr = parts[1] || '';
             html += `<th class="py-3 px-4 text-center font-semibold text-white min-w-[130px]">
-                <div class="text-sm font-bold text-blue-400">${sessionLec}</div>
-                <div class="text-xs text-gray-300 font-normal mt-0.5">${dateStr}</div>
-                <div class="text-[10px] text-gray-400 font-mono">${timeStr}</div>
+                <div class="text-sm font-bold text-blue-400">${escHtml(sessionLec)}</div>
+                <div class="text-xs text-gray-300 font-normal mt-0.5">${escHtml(dateStr)}</div>
+                <div class="text-[10px] text-gray-400 font-mono">${escHtml(timeStr)}</div>
               </th>`;
         });
         html += `</tr></thead><tbody>`;
@@ -574,9 +587,9 @@
             const student = studentMap[sId];
             html += `
               <tr class="border-b border-white/5 hover:bg-white/5 transition-colors">
-                <td class="py-3 px-4 font-mono text-xs text-gray-400">${sId}</td>
-                <td class="py-3 px-4 font-semibold text-white">${student.name}</td>
-                <td class="py-3 px-4 text-xs text-gray-400">${student.branch}</td>
+                <td class="py-3 px-4 font-mono text-xs text-gray-400">${escHtml(sId)}</td>
+                <td class="py-3 px-4 font-semibold text-white">${escHtml(student.name)}</td>
+                <td class="py-3 px-4 text-xs text-gray-400">${escHtml(student.branch)}</td>
             `;
 
             timestamps.forEach(ts => {
@@ -598,7 +611,7 @@
 
                  html += `
                    <td class="py-3 px-4 text-center">
-                     <button type="button" onclick="toggleMatrixStatus('${sId}', '${selectedLec}', '${ts}', '${status}', this)" class="transform active:scale-95 transition-all inline-block">
+                     <button type="button" onclick="toggleMatrixStatus('${escSq(sId)}', '${escSq(selectedLec)}', '${escSq(ts)}', '${status}', this)" class="transform active:scale-95 transition-all inline-block">
                        <span class="${badgeClass}">${innerContent}</span>
                      </button>
                    </td>
@@ -622,23 +635,26 @@
       if (!tableData || !tableData.length) {
         alert("No attendance records to download in the current filter.");
         return;
-      }      let csvContent = "data:text/csv;charset=utf-8,";
-      csvContent += "Student_ID,Name,Program,Branch,Batch,Status,Timestamp,Lecture\n";
-      
-      tableData.forEach(row => {
-          let formattedRow = row.map(e => `"${e}"`).join(",");
-          csvContent += formattedRow + "\n";
-      });
+      }
+      const csvCell = (v) => {
+        let s = String(v ?? '');
+        if (/^[=+\-@]/.test(s)) s = "'" + s; // stop Excel formula injection
+        return '"' + s.replace(/"/g, '""') + '"';
+      };
+      let csv = "Student_ID,Name,Program,Branch,Batch,Status,Timestamp,Lecture\n";
+      tableData.forEach(row => { csv += row.map(csvCell).join(",") + "\n"; });
 
-      const encodedUri = encodeURI(csvContent);
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       
-      link.setAttribute("href", encodedUri);
+      link.setAttribute("href", url);
       link.setAttribute("download", `Filtered_Attendance_Report_${timestamp}.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     });
 
     $("#statusFilter, #batchFilter, #lectureFilter").on("change", function () {
@@ -672,7 +688,7 @@
         $(this).removeClass("btn-danger-glass").addClass("btn-secondary-glass");
         todayFilterActive = false;
       }
-      lucide.createIcons();
+      safeLucide();
     });
   });
 
@@ -694,10 +710,11 @@
                   status: newStatus
               })
           });
+          if (!response.ok) throw new Error("HTTP " + response.status);
           const result = await response.json();
           if (result.success) {
-              // Sync local DataTable datasource
-              const matchedRow = rawAttendanceData.find(r => r[0] === studentId && r[7] === lecture && r[6] === timestamp);
+              // Sync local DataTable datasource (string-compare: IDs may be numeric)
+              const matchedRow = rawAttendanceData.find(r => String(r[0]) === String(studentId) && String(r[7]) === String(lecture) && String(r[6]) === String(timestamp));
               if (matchedRow) {
                   matchedRow[5] = newStatus;
               }
@@ -736,10 +753,11 @@
                   status: newStatus
               })
           });
+          if (!response.ok) throw new Error("HTTP " + response.status);
           const result = await response.json();
           if (result.success) {
               // Find and update matched record in local cache
-              let matchedRow = rawAttendanceData.find(r => r[0] === studentId && r[7] === lecture && r[6] === timestamp);
+              let matchedRow = rawAttendanceData.find(r => String(r[0]) === String(studentId) && String(r[7]) === String(lecture) && String(r[6]) === String(timestamp));
               if (matchedRow) {
                   matchedRow[5] = newStatus;
               } else {
@@ -785,6 +803,7 @@
       const selectedLec = $('#matrixLectureFilter').val();
       const selectedProg = $('#matrixProgramFilter').val();
       const selectedBranch = $('#matrixBranchFilter').val();
+      const selectedBatch = $('#matrixBatchFilter').val();
       if (!selectedLec || !selectedProg || !selectedBranch) return;
 
       const dateStr = new Date().toISOString().split('T')[0];
@@ -817,10 +836,11 @@
       const btn = document.getElementById("refreshMatrixBtn");
       const originalHTML = btn.innerHTML;
       btn.innerHTML = `<i data-lucide="refresh-cw" class="w-4 h-4 animate-spin"></i> Refreshing...`;
-      lucide.createIcons();
+      safeLucide();
 
       try {
           const res = await fetch("/get_attendance_data");
+          if (!res.ok) throw new Error("HTTP " + res.status);
           const json = await res.json();
           rawAttendanceData = json.attendance || [];
           rawStudentsData = json.students || [];
@@ -829,7 +849,7 @@
           console.error("Refresh failed:", e);
       } finally {
           btn.innerHTML = originalHTML;
-          lucide.createIcons();
+          safeLucide();
       }
   }
 
@@ -837,6 +857,14 @@
       const table = document.getElementById("matrixTable");
       if (!table) return alert("No matrix table found.");
 
+      const csvCell = (t) => {
+        let text = String(t ?? '').trim();
+        // Standardize toggle-button Present/Absent labels
+        if (text.includes("Present")) text = "Present";
+        else if (text.includes("Absent")) text = "Absent";
+        if (/^[=+\-@]/.test(text)) text = "'" + text;
+        return '"' + text.replace(/"/g, '""') + '"';
+      };
       let csv = [];
       const rows = table.querySelectorAll("tr");
       
@@ -844,30 +872,24 @@
           let row = [], cols = rows[i].querySelectorAll("td, th");
           
           for (let j = 0; j < cols.length; j++) {
-              let text = cols[j].innerText.trim();
-              
-              // Standardize toggle-button Present/Absent labels
-              if (text.includes("Present")) text = "Present";
-              else if (text.includes("Absent")) text = "Absent";
-              
-              text = text.replace(/"/g, '""');
-              row.push('"' + text + '"');
+              row.push(csvCell(cols[j].innerText));
           }
           csv.push(row.join(","));
       }
 
-      const csvContent = "data:text/csv;charset=utf-8," + csv.join("\n");
-      const encodedUri = encodeURI(csvContent);
+      const blob = new Blob([csv.join("\n")], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
-      const lecture = document.getElementById("matrixLectureFilter").value || "Class";
-      const program = document.getElementById("matrixProgramFilter").value || "Prog";
-      const branch = document.getElementById("matrixBranchFilter").value || "Branch";
+      const lecture = (document.getElementById("matrixLectureFilter").value || "Class").replace(/[/\\:*?"<>|]/g, '_');
+      const program = (document.getElementById("matrixProgramFilter").value || "Prog").replace(/[/\\:*?"<>|]/g, '_');
+      const branch = (document.getElementById("matrixBranchFilter").value || "Branch").replace(/[/\\:*?"<>|]/g, '_');
       
-      link.setAttribute("href", encodedUri);
+      link.setAttribute("href", url);
       link.setAttribute("download", `Attendance_Register_${lecture}_${program}_${branch}.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 </script>
 

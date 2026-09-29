@@ -67,6 +67,19 @@ def submit_student():
     if not name or not student_id or not photo:
         return _respond('error', 'Name, Student ID, and Photo are required fields.', 400)
 
+    from src.utils.db import is_valid_email as _is_email
+    if gmail and not _is_email(gmail):
+        return _respond('error', 'Enter a valid email address.', 400)
+
+    enrollment_year_int = None
+    if enrollment_year:
+        try:
+            enrollment_year_int = int(enrollment_year)
+            if enrollment_year_int < 1900 or enrollment_year_int > 2100:
+                return _respond('error', 'Enrollment year must be between 1900 and 2100.', 400)
+        except (TypeError, ValueError):
+            return _respond('error', 'Enrollment year must be a valid number.', 400)
+
     # Check for existing student by ID
     try:
         existing = supabase_admin.table('students').select('id, name').eq('id', student_id).execute()
@@ -98,6 +111,24 @@ def submit_student():
     safe_id = secure_filename(student_id)
     if not safe_id:
         return _respond('error', 'Student ID contains invalid characters.', 400)
+
+    # Basic upload guard: images only, ≤ 10 MB
+    _mime = (photo.mimetype or '').lower()
+    if _mime and not (_mime.startswith('image/')):
+        return _respond('error', 'Photo must be an image file.', 400)
+    try:
+        photo.seek(0, os.SEEK_END)
+        _size = photo.tell()
+        photo.seek(0)
+        if _size > 10 * 1024 * 1024:
+            return _respond('error', 'Photo must be 10 MB or smaller.', 400)
+        if _size == 0:
+            return _respond('error', 'Uploaded photo is empty.', 400)
+    except Exception:
+        try:
+            photo.seek(0)
+        except Exception:
+            pass
     
     filename = f"{safe_id}.jpg"
     os.makedirs(config.KNOWN_FACES_DIR, exist_ok=True)
@@ -130,8 +161,8 @@ def submit_student():
             "gmail": gmail,
             "embedding": normalized_emb.tolist()
         }
-        if enrollment_year:
-            insert_data["enrollment_year"] = int(enrollment_year)
+        if enrollment_year_int is not None:
+            insert_data["enrollment_year"] = enrollment_year_int
         if academic_year:
             insert_data["academic_year"] = academic_year
 
@@ -161,10 +192,16 @@ def submit_student():
             program=program,
             branch=branch,
             embedding=normalized_emb,
-            enrollment_year=int(enrollment_year) if enrollment_year else None,
+            enrollment_year=enrollment_year_int,
             academic_year=academic_year
         )
     except Exception as e:
+        # Don't orphan the saved photo when the DB insert fails
+        try:
+            if os.path.exists(filepath):
+                os.remove(filepath)
+        except Exception:
+            pass
         return _respond('error', f'Database insertion error: {e}', 500)
 
     return _respond('success', f'Student profile for "{name}" (ID: {student_id}) successfully registered!', 200)

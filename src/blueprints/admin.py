@@ -15,6 +15,7 @@ Routes:
 """
 
 from datetime import datetime, timedelta
+import os
 
 from flask import Blueprint, jsonify, redirect, render_template, request, session, url_for
 
@@ -123,11 +124,16 @@ def admin_edit_student(student_id):
         return redirect(url_for('admin.admin_students'))
 
     if request.method == 'POST':
-        name    = request.form['name'].strip()
-        program = request.form['program'].strip()
-        branch  = request.form['branch'].strip()
-        gmail   = request.form['gmail'].strip()
+        name    = request.form.get('name', '').strip()
+        program = request.form.get('program', '').strip()
+        branch  = request.form.get('branch', '').strip()
+        gmail   = request.form.get('gmail', '').strip()
         photo   = request.files.get('photo')
+
+        if not name or not program or not branch or not gmail:
+            return redirect(url_for('admin.admin_students'))
+        if not is_valid_email(gmail):
+            return redirect(url_for('admin.admin_students'))
 
         update_payload = {
             'name': name,
@@ -162,6 +168,7 @@ def admin_edit_student(student_id):
                             update_payload['embedding'] = normalized_emb.tolist()
                             update_payload['current_ewma_drift'] = 0.0
                             update_payload['drift_alert_level'] = 'HEALTHY'
+                            _new_cache_embedding = normalized_emb
 
                             # Log re-enrollment event
                             try:
@@ -180,6 +187,20 @@ def admin_edit_student(student_id):
 
         try:
             supabase.table('students').update(update_payload).eq('id', student_id).execute()
+            # Keep in-memory face cache in sync (re-enrollment photo or metadata change)
+            try:
+                from src.utils.face_cache import add_student_to_cache
+                cache_emb = locals().get('_new_cache_embedding')
+                if cache_emb is not None:
+                    add_student_to_cache(
+                        student_id=student_id, name=name,
+                        program=program, branch=branch, embedding=cache_emb,
+                    )
+                else:
+                    from src.utils.face_cache import reload_face_cache
+                    reload_face_cache()
+            except Exception:
+                pass
         except Exception as e:
             print("Update student error:", e)
             
@@ -209,6 +230,13 @@ def admin_delete_student(student_id):
             filepath = os.path.join(config.KNOWN_FACES_DIR, filename)
             if os.path.exists(filepath):
                 os.remove(filepath)
+
+        # 4. Evict from in-memory face cache so deleted students stop matching
+        try:
+            from src.utils.face_cache import remove_student_from_cache
+            remove_student_from_cache(student_id)
+        except Exception:
+            pass
     except Exception as e:
         print(f"Cascading delete failed for student {student_id}: {e}")
         
@@ -248,6 +276,15 @@ def admin_mark_attendance():
                 "timestamp": timestamp,
                 "lecture": lecture
             })
+
+        # Auto-register new lecture names so lecture dropdowns stay populated
+        # (additive only — failures are ignored and never block marking)
+        try:
+            ex_l = supabase.table('academic_structure').select('id').eq('type', 'lecture').eq('value', lecture).execute()
+            if not ex_l.data:
+                supabase.table('academic_structure').insert({"type": "lecture", "value": lecture}).execute()
+        except Exception:
+            pass
 
         try:
             if attendance_records:
@@ -409,7 +446,8 @@ def admin_reset():
         return denied
 
     reset_type = request.form.get('reset_type')
-    import os
+    if reset_type not in ('attendance', 'all'):
+        return redirect(url_for('admin.admin_dashboard', error="Invalid reset type"))
 
     try:
         if reset_type == 'attendance':
@@ -433,6 +471,13 @@ def admin_reset():
         else:
             return redirect(url_for('admin.admin_dashboard', error="Invalid reset type"))
 
+        # Keep in-memory face cache consistent after destructive resets
+        try:
+            from src.utils.face_cache import reload_face_cache
+            reload_face_cache()
+        except Exception:
+            pass
+
         return redirect(url_for('admin.admin_dashboard', status="success", message="Database reset successfully"))
     except Exception as e:
         print("Reset error:", e)
@@ -447,10 +492,32 @@ def admin_academics():
 
     if request.method == 'POST':
         action = request.form.get('action')
-        item_type = request.form.get('type')  # program, branch
+        item_type = request.form.get('type')  # program, branch, lecture
         item_value = request.form.get('value', '').strip()
 
+        from src.utils.academic_defaults import (
+            ALLOWED_ACADEMIC_TYPES, DEFAULT_BRANCHES, DEFAULT_LECTURES, DEFAULT_PROGRAMS,
+        )
+
+        if action == 'seed_defaults':
+            # One-click restore of built-in COER defaults (additive: upsert only)
+            try:
+                for p in DEFAULT_PROGRAMS:
+                    supabase.table('academic_structure').upsert(
+                        {'type': 'program', 'value': p}, on_conflict='type,value').execute()
+                for b in DEFAULT_BRANCHES:
+                    supabase.table('academic_structure').upsert(
+                        {'type': 'branch', 'value': b}, on_conflict='type,value').execute()
+                for lec in DEFAULT_LECTURES:
+                    supabase.table('academic_structure').upsert(
+                        {'type': 'lecture', 'value': lec}, on_conflict='type,value').execute()
+            except Exception as e:
+                print("Error seeding academic defaults:", e)
+            return redirect(url_for('admin.admin_academics'))
+
         if action == 'add' and item_type and item_value:
+            if item_type not in ALLOWED_ACADEMIC_TYPES:
+                return redirect(url_for('admin.admin_academics'))
             try:
                 supabase.table('academic_structure').upsert({
                     'type': item_type,
@@ -460,6 +527,8 @@ def admin_academics():
                 print("Error adding academic item:", e)
 
         elif action == 'delete' and item_type and item_value:
+            if item_type not in ALLOWED_ACADEMIC_TYPES:
+                return redirect(url_for('admin.admin_academics'))
             try:
                 # First delete matching rows from academic_structure table
                 supabase.table('academic_structure').delete().eq('type', item_type).eq('value', item_value).execute()
@@ -475,13 +544,34 @@ def admin_academics():
     except Exception:
         rows = []
 
-    programs = sorted(list({r['value'] for r in rows if r.get('type') == 'program'}))
-    branches = sorted(list({r['value'] for r in rows if r.get('type') == 'branch'}))
+    programs = sorted(list({r['value'] for r in rows if r.get('type') == 'program' and r.get('value')}))
+    branches = sorted(list({r['value'] for r in rows if r.get('type') == 'branch' and r.get('value')}))
+    lectures = sorted(list({r['value'] for r in rows if r.get('type') == 'lecture' and r.get('value')}))
+
+    # Fallback so the page never renders completely empty on a fresh DB
+    if not programs or not branches or not lectures:
+        try:
+            from src.utils.academic_defaults import DEFAULT_BRANCHES, DEFAULT_LECTURES, DEFAULT_PROGRAMS
+            show_defaults_hint = True
+            programs_for_display = programs or list(DEFAULT_PROGRAMS)
+            branches_for_display = branches or list(DEFAULT_BRANCHES)
+            lectures_for_display = lectures or list(DEFAULT_LECTURES)
+        except Exception:
+            show_defaults_hint = False
+            programs_for_display, branches_for_display, lectures_for_display = programs, branches, lectures
+    else:
+        show_defaults_hint = False
+        programs_for_display, branches_for_display, lectures_for_display = programs, branches, lectures
 
     return render_template(
         'admin_academics.html',
         programs=programs,
-        branches=branches
+        branches=branches,
+        lectures=lectures,
+        programs_display=programs_for_display,
+        branches_display=branches_for_display,
+        lectures_display=lectures_for_display,
+        show_defaults_hint=show_defaults_hint,
     )
 
 

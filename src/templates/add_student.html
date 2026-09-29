@@ -371,7 +371,18 @@
 
     // Fetch dynamic academic options & initialize Guided Camera on load
     document.addEventListener("DOMContentLoaded", async function() {
-      // 1. Fetch Academic Options
+      // 1. Fetch Academic Options (with built-in fallback so dropdowns are never empty)
+      const FALLBACK_PROGRAMS = ["B.Tech","M.Tech","BCA","MCA","B.Sc","M.Sc","BBA","MBA","Diploma","Ph.D"];
+      const FALLBACK_BRANCHES = ["CSE","IT","ECE","EEE","ME","CE","AI & ML","Data Science","Cyber Security","Biotechnology"];
+      const fillSelect = (sel, items, placeholder) => {
+        sel.innerHTML = `<option value="">${placeholder}</option>`;
+        (items || []).forEach(v => {
+          if (!v) return;
+          const opt = document.createElement('option');
+          opt.value = v; opt.textContent = v;
+          sel.appendChild(opt);
+        });
+      };
       try {
         const res = await fetch('/api/academic_options');
         const data = await res.json();
@@ -379,14 +390,14 @@
         const pSel = document.getElementById('programSelect');
         const bSel = document.getElementById('branchSelect');
 
-        (data.programs || []).forEach(p => {
-          pSel.innerHTML += `<option value="${p}">${p}</option>`;
-        });
-        (data.branches || []).forEach(b => {
-          bSel.innerHTML += `<option value="${b}">${b}</option>`;
-        });
+        const progs = (data.programs && data.programs.length) ? data.programs : FALLBACK_PROGRAMS;
+        const brans = (data.branches && data.branches.length) ? data.branches : FALLBACK_BRANCHES;
+        fillSelect(pSel, progs, 'Select Program');
+        fillSelect(bSel, brans, 'Select Branch');
       } catch (e) {
         console.error("Error loading academic options:", e);
+        fillSelect(document.getElementById('programSelect'), FALLBACK_PROGRAMS, 'Select Program');
+        fillSelect(document.getElementById('branchSelect'), FALLBACK_BRANCHES, 'Select Branch');
       }
 
       // 2. Initialize Guided Camera System

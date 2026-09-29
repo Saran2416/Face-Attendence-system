@@ -10,7 +10,7 @@ Routes:
 """
 
 import base64
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import cv2
 import numpy as np
@@ -280,6 +280,10 @@ def upload_photo():
 
     files   = request.files.getlist('images')
 
+    # Upload guards: at most 10 images, 10 MB each, images only
+    if len(files) > 10:
+        return jsonify({"error": "Maximum 10 images per upload", "images": [], "session_attendance": []}), 400
+
     now       = datetime.now()
     timestamp = now.strftime("%Y-%m-%d %H:%M:%S")
 
@@ -288,7 +292,19 @@ def upload_photo():
     confidence_map   = {}
 
     for file in files:
-        npimg  = np.frombuffer(file.read(), np.uint8)
+        try:
+            _mime = (file.mimetype or '').lower()
+            if _mime and not _mime.startswith('image/'):
+                all_outputs.append({"results": [], "annotated": ""})
+                continue
+            _raw = file.read(10 * 1024 * 1024 + 1)
+            if not _raw or len(_raw) > 10 * 1024 * 1024:
+                all_outputs.append({"results": [], "annotated": ""})
+                continue
+            npimg  = np.frombuffer(_raw, np.uint8)
+        except Exception:
+            all_outputs.append({"results": [], "annotated": ""})
+            continue
         frame  = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
         if frame is None:
             all_outputs.append({"results": [], "annotated": ""})
@@ -563,6 +579,15 @@ def upload_photo():
             import logging
             logging.getLogger(__name__).error("Failed to insert bulk attendance: %s", e, exc_info=True)
 
+    # Auto-register the lecture name so lecture dropdowns stay populated
+    # (additive only — failures are ignored and never block attendance)
+    try:
+        ex_l = supabase_admin.table('academic_structure').select('id').eq('type', 'lecture').eq('value', lecture).execute()
+        if not ex_l.data:
+            supabase_admin.table('academic_structure').insert({"type": "lecture", "value": lecture}).execute()
+    except Exception:
+        pass
+
     return jsonify({
         "images": all_outputs,
         "session_attendance": session_attend,
@@ -615,23 +640,81 @@ def update_attendance_status():
 
 @attendance_bp.route('/api/academic_options')
 def get_academic_options():
-    """Return distinct programs, branches, and batch years registered in DB."""
-    try:
-        struct_resp = supabase_admin.table('academic_structure').select('type, value').execute()
-        rows = struct_resp.data or []
-        
-        programs = sorted(list({r.get('value') for r in rows if r.get('type') == 'program'}))
-        branches = sorted(list({r.get('value') for r in rows if r.get('type') == 'branch'}))
+    """Return distinct programs, branches, batch years and lectures registered in DB.
 
-        # Also fetch distinct batch years from students
-        students_resp = supabase_admin.table('students').select('*').execute()
-        stus = students_resp.data or []
+    Additive fallback (no behaviour change for populated DBs): when the
+    `academic_structure` table is empty/unreachable, programs/branches fall
+    back to values found in `students` plus built-in COER defaults so that
+    dropdowns are never empty on a fresh install. Lectures are derived from
+    past attendance logs + stored `lecture` rows + built-in defaults.
+    """
+    try:
+        try:
+            struct_resp = supabase_admin.table('academic_structure').select('type, value').execute()
+            rows = struct_resp.data or []
+        except Exception:
+            rows = []
+
+        programs = sorted(list({r.get('value') for r in rows if r.get('type') == 'program' and r.get('value')}))
+        branches = sorted(list({r.get('value') for r in rows if r.get('type') == 'branch' and r.get('value')}))
+        stored_lectures = sorted(list({r.get('value') for r in rows if r.get('type') == 'lecture' and r.get('value')}))
+
+        # Also fetch students (for batch years + fallback programs/branches)
+        try:
+            students_resp = supabase_admin.table('students').select('*').execute()
+            stus = students_resp.data or []
+        except Exception:
+            stus = []
         years = sorted(list({extract_student_year(s) for s in stus if extract_student_year(s) is not None}), reverse=True)
+
+        # Fallback: derive programs/branches from student rows when lookup table is empty
+        if not programs:
+            from_students = sorted(list({str(s.get('program')).strip() for s in stus if s.get('program') and str(s.get('program')).strip()}))
+            programs = from_students
+        if not branches:
+            from_students_b = sorted(list({str(s.get('branch')).strip() for s in stus if s.get('branch') and str(s.get('branch')).strip()}))
+            branches = from_students_b
+
+        # Final safety net: built-in COER defaults so lists are never empty
+        if not programs or not branches:
+            try:
+                from src.utils.academic_defaults import DEFAULT_PROGRAMS, DEFAULT_BRANCHES
+                if not programs:
+                    programs = list(DEFAULT_PROGRAMS)
+                if not branches:
+                    branches = list(DEFAULT_BRANCHES)
+            except Exception:
+                pass
+
+        # Lectures: past attendance + stored lectures + defaults (deduplicated)
+        log_lectures = []
+        try:
+            lec_resp = supabase_admin.table('attendance').select('lecture').limit(2000).execute()
+            for r in (lec_resp.data or []):
+                v = (r.get('lecture') or '').strip()
+                if v:
+                    log_lectures.append(v)
+        except Exception:
+            pass
+        try:
+            from src.utils.academic_defaults import DEFAULT_LECTURES
+            default_lecs = list(DEFAULT_LECTURES)
+        except Exception:
+            default_lecs = []
+        seen = set()
+        lectures = []
+        for lec in stored_lectures + sorted(set(log_lectures)) + default_lecs:
+            key = lec.strip().upper()
+            if lec and key not in seen:
+                seen.add(key)
+                lectures.append(lec.strip())
+        lectures = sorted(lectures)
 
         return jsonify({
             "programs": programs,
             "branches": branches,
-            "years": years
+            "years": years,
+            "lectures": lectures,
         })
     except Exception as e:
         import logging
@@ -639,8 +722,24 @@ def get_academic_options():
         return jsonify({
             "programs": [],
             "branches": [],
-            "years": []
+            "years": [],
+            "lectures": [],
         })
+
+
+@attendance_bp.route('/api/lecture_options')
+def get_lecture_options():
+    """Return the lecture master list (stored + previously used + defaults)."""
+    try:
+        resp = get_academic_options()
+        # get_academic_options returns a Flask Response; reuse its JSON
+        import json as _json
+        payload = _json.loads(resp.get_data(as_text=True))
+        return jsonify({"lectures": payload.get("lectures", [])})
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error("Error fetching lecture options: %s", e, exc_info=True)
+        return jsonify({"lectures": []})
 
 
 

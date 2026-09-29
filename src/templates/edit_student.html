@@ -108,22 +108,22 @@
       <form method="POST" enctype="multipart/form-data" class="space-y-4">
         <div>
           <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Name</label>
-          <input name="name" value="{{ student['name'] }}" class="input-dark-glass w-full rounded-lg px-4 py-3 text-sm" required />
+          <input name="name" value="{{ student.get('name', '') }}" class="input-dark-glass w-full rounded-lg px-4 py-3 text-sm" required />
         </div>
 
         <div>
           <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Program</label>
-          <input name="program" value="{{ student['program'] }}" class="input-dark-glass w-full rounded-lg px-4 py-3 text-sm" required />
+          <input name="program" value="{{ student.get('program', '') }}" class="input-dark-glass w-full rounded-lg px-4 py-3 text-sm" required />
         </div>
 
         <div>
           <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Branch</label>
-          <input name="branch" value="{{ student['branch'] }}" class="input-dark-glass w-full rounded-lg px-4 py-3 text-sm" required />
+          <input name="branch" value="{{ student.get('branch', '') }}" class="input-dark-glass w-full rounded-lg px-4 py-3 text-sm" required />
         </div>
 
         <div>
           <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Gmail</label>
-          <input name="gmail" value="{{ student['gmail'] }}" class="input-dark-glass w-full rounded-lg px-4 py-3 text-sm" required />
+          <input name="gmail" value="{{ student.get('gmail', '') }}" class="input-dark-glass w-full rounded-lg px-4 py-3 text-sm" required />
         </div>
 
         <div class="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl">
@@ -143,7 +143,7 @@
   </main>
 
   <script>
-    lucide.createIcons();
+    try { if (window.lucide) lucide.createIcons(); } catch (_) {}
   </script>
   <script src="{{ url_for('static', filename='js/offline-detector.js') }}"></script>
 </body>

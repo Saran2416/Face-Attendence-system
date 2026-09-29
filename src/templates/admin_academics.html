@@ -103,12 +103,27 @@
       <div class="flex items-center justify-between border-b border-white/10 pb-4 mb-6">
         <div class="flex items-center gap-3">
           <i data-lucide="layers" class="w-6 h-6 text-blue-400"></i>
-          <h2 class="text-xl font-bold font-geist text-white">Manage Programs & Branches</h2>
+          <h2 class="text-xl font-bold font-geist text-white">Manage Programs, Branches & Lectures</h2>
         </div>
-        <a href="/admin" class="btn-secondary-glass px-4 py-2 rounded-lg text-xs font-semibold">Back to Admin</a>
+        <div class="flex items-center gap-2">
+          <form action="/admin/academics" method="POST">
+            <input type="hidden" name="action" value="seed_defaults">
+            <button type="submit" class="btn-secondary-glass px-4 py-2 rounded-lg text-xs font-semibold flex items-center gap-2" title="Insert built-in COER programs, branches and lectures (existing rows untouched)">
+              <i data-lucide="database-zap" class="w-4 h-4"></i> Restore Defaults
+            </button>
+          </form>
+          <a href="/admin" class="btn-secondary-glass px-4 py-2 rounded-lg text-xs font-semibold">Back to Admin</a>
+        </div>
       </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {% if show_defaults_hint %}
+      <div class="mb-6 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-start gap-2">
+        <i data-lucide="info" class="w-4 h-4 mt-0.5 shrink-0"></i>
+        <div>No saved rows yet — showing built-in defaults below. Click <strong>Restore Defaults</strong> to save them to the database, or add your own.</div>
+      </div>
+      {% endif %}
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
         
         <!-- PROGRAMS -->
         <div class="bg-white/5 border border-white/10 rounded-xl p-5 space-y-4">
@@ -174,7 +189,37 @@
           </div>
         </div>
 
-
+        <!-- LECTURES -->
+        <div class="bg-white/5 border border-white/10 rounded-xl p-5 space-y-4">
+          <h3 class="text-sm font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-2">
+            <i data-lucide="book-open-check" class="w-4 h-4"></i> Lectures / Subjects
+          </h3>
+          <form action="/admin/academics" method="POST" class="flex gap-2">
+            <input type="hidden" name="action" value="add">
+            <input type="hidden" name="type" value="lecture">
+            <input type="text" name="value" required placeholder="e.g. Data Structures" class="input-dark-glass w-full px-3 py-2 text-xs rounded-lg">
+            <button type="submit" class="btn-primary-glass px-4 py-2 text-xs font-bold rounded-lg flex items-center gap-1">
+              <i data-lucide="plus" class="w-3.5 h-3.5"></i> Add
+            </button>
+          </form>
+          <div class="space-y-2 max-h-60 overflow-y-auto">
+            {% for item in lectures %}
+            <div class="flex justify-between items-center bg-[#0b1326]/60 p-2.5 rounded-lg border border-white/5 text-xs text-white">
+              <span>{{ item }}</span>
+              <form action="/admin/academics" method="POST">
+                <input type="hidden" name="action" value="delete">
+                <input type="hidden" name="type" value="lecture">
+                <input type="hidden" name="value" value="{{ item }}">
+                <button type="submit" class="text-rose-400 hover:text-rose-300 text-xs flex items-center gap-1">
+                  <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                </button>
+              </form>
+            </div>
+            {% else %}
+            <p class="text-xs text-gray-500 text-center py-2">No lectures saved yet — add subjects above.</p>
+            {% endfor %}
+          </div>
+        </div>
 
       </div>
     </div>

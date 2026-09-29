@@ -7,6 +7,12 @@ Routes: /login, /logout, /register, /forgot_password
 import logging
 from flask import Blueprint, redirect, render_template, request, session, url_for
 from src.utils.db import supabase, supabase_admin, is_valid_email
+from src.utils.auth_helpers import (
+    clear_failed_logins,
+    is_account_locked,
+    record_failed_login,
+    remaining_attempts,
+)
 from src import config
 from supabase import AuthApiError
 
@@ -17,11 +23,19 @@ auth_bp = Blueprint('auth', __name__)
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        email = request.form.get('email', '').strip()
+        email = request.form.get('email', '').strip().lower()
         password = request.form.get('password', '').strip()
 
         if not email or not password:
             return render_template('login.html', error="Email and password required")
+
+        locked, wait_s = is_account_locked(email)
+        if locked:
+            mins = max(wait_s // 60, 1)
+            return render_template(
+                'login.html',
+                error=f"Account locked due to too many failed attempts. Try again in ~{mins} min.",
+            )
 
         try:
             # Authenticate with Supabase Auth
@@ -29,7 +43,6 @@ def login():
                 "email": email,
                 "password": password
             })
-            
             user = auth_response.user
             
             # Check if user is admin via metadata
@@ -44,16 +57,23 @@ def login():
             session['user_id'] = user.id
             session['access_token'] = auth_response.session.access_token
 
+            clear_failed_logins(email)
             logger.info(f"User {username} successfully logged in via password.")
             return redirect(url_for('attendance.index'))
             
         except Exception as e:
+            record_failed_login(email)
+            left = remaining_attempts(email)
             logger.error(f"Password login failed for {email}: {e}", exc_info=True)
             error_message = str(e)
             if "AuthApiError" in error_message or hasattr(e, 'message'):
                 error_message = getattr(e, 'message', str(e))
             else:
                 error_message = "Invalid email or password"
+            if left == 0:
+                error_message += " Account locked — try again later."
+            elif left <= 2:
+                error_message += f" ({left} attempt(s) left before lockout.)"
             return render_template('login.html', error=error_message)
 
     error = request.args.get('error')
@@ -91,8 +111,8 @@ def register():
         if not is_valid_email(email):
             return render_template('register.html', error="Invalid email format")
 
-        if len(password) < 8:
-            return render_template('register.html', error="Password must be at least 8 characters")
+        if len(password) < config.MIN_PASSWORD_LENGTH:
+            return render_template('register.html', error=f"Password must be at least {config.MIN_PASSWORD_LENGTH} characters")
 
         try:
             # Create user using Supabase Admin API

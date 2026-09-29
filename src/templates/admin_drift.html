@@ -215,8 +215,8 @@
                     <i data-lucide="camera" class="w-3.5 h-3.5"></i> Re-Enroll Photo
                   </a>
 
-                  <form action="/admin/student/reset_drift/{{ s.id }}" method="POST" onsubmit="return confirm('Reset EWMA drift score for {{ s.name }} to 0.00 (Re-enrolled)?')">
-                    <button type="submit" class="btn-glass px-3 py-1.5 rounded-lg text-xs font-semibold text-emerald-400 hover:bg-emerald-500/20 flex items-center gap-1.5">
+                  <form action="/admin/student/reset_drift/{{ s.id }}" method="POST" onsubmit="return confirmResetDrift(this)">
+                    <button type="submit" data-student-name="{{ s.name|e }}" class="reset-drift-btn btn-glass px-3 py-1.5 rounded-lg text-xs font-semibold text-emerald-400 hover:bg-emerald-500/20 flex items-center gap-1.5">
                       <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Quick Reset
                     </button>
                   </form>
@@ -267,7 +267,15 @@
   </div>
 
   <script>
-    lucide.createIcons();
+    try { if (window.lucide) lucide.createIcons(); } catch (_) {}
+    function escHtml(s) {
+      return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+    function confirmResetDrift(form) {
+      const btn = form.querySelector('.reset-drift-btn');
+      const nm = btn ? (btn.getAttribute('data-student-name') || 'this student') : 'this student';
+      return confirm('Reset EWMA drift score for ' + nm + ' to 0.00 (Re-enrolled)?');
+    }
 
     function filterStudents() {
       const q = document.getElementById('searchBox').value.toLowerCase();
@@ -290,27 +298,30 @@
 
       try {
         const res = await fetch(`/admin/api/drift_history/${encodeURIComponent(studentId)}`);
+        if (!res.ok) throw new Error("HTTP " + res.status);
         const json = await res.json();
         
-        if (!json.success || !json.data.length) {
+        if (!json.success || !(json.data && json.data.length)) {
           list.innerHTML = '<div class="text-center text-xs text-gray-500 py-4">No drift log events captured yet.</div>';
           if (chartInstance) chartInstance.destroy();
           return;
         }
 
         const events = json.data;
+        const fmtNum = (v, d) => (typeof v === 'number' && isFinite(v) ? v.toFixed(d) : '-');
+        const fmtDate = (t) => { const d = new Date(t); return isNaN(d) ? '—' : d.toLocaleString(); };
         
         // Populate list
         list.innerHTML = events.slice().reverse().map(e => `
           <div class="flex items-center justify-between bg-white/5 px-3 py-2 rounded-lg text-xs">
             <div class="flex items-center gap-2">
               <span class="w-2 h-2 rounded-full ${e.pose_accepted ? 'bg-emerald-400' : 'bg-amber-400'}"></span>
-              <span class="text-gray-300 font-mono">${new Date(e.created_at).toLocaleString()}</span>
+              <span class="text-gray-300 font-mono">${escHtml(fmtDate(e.created_at))}</span>
             </div>
             <div class="flex items-center gap-3">
-              <span class="text-gray-400">Yaw: ${e.pose_yaw}° | Pitch: ${e.pose_pitch}°</span>
+              <span class="text-gray-400">Yaw: ${escHtml(fmtNum(e.pose_yaw, 1))}° | Pitch: ${escHtml(fmtNum(e.pose_pitch, 1))}°</span>
               <span class="font-mono font-bold ${e.pose_accepted ? 'text-blue-300' : 'text-amber-400'}">
-                ${e.pose_accepted ? 'EWMA: ' + (e.ewma_drift ? e.ewma_drift.toFixed(4) : '-') : 'POSE REJECTED'}
+                ${e.pose_accepted ? 'EWMA: ' + escHtml(fmtNum(e.ewma_drift, 4)) : 'POSE REJECTED'}
               </span>
             </div>
           </div>
@@ -325,6 +336,9 @@
         if (chartInstance) chartInstance.destroy();
 
         if (validEvents.length > 0) {
+          if (typeof Chart === 'undefined') {
+            list.insertAdjacentHTML('beforeend', '<div class="text-center text-xs text-amber-400 py-2">Chart library unavailable (offline) — log list above is complete.</div>');
+          } else {
           chartInstance = new Chart(ctx, {
             type: 'line',
             data: {
@@ -359,6 +373,7 @@
               }
             }
           });
+          }
         }
 
       } catch (err) {

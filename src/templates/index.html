@@ -157,8 +157,10 @@
                     <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
                         <i data-lucide="book-open" class="w-4 h-4"></i>
                     </div>
-                    <input type="text" name="lecture" placeholder="e.g. CS101 (Optional)" class="input-dark-glass w-full rounded-xl pl-10 pr-4 py-3 text-sm font-medium"/>
+                    <input type="text" name="lecture" list="lectureList" placeholder="e.g. CS101 (Optional)" class="input-dark-glass w-full rounded-xl pl-10 pr-4 py-3 text-sm font-medium"/>
+                    <datalist id="lectureList"></datalist>
                 </div>
+                <p class="text-[11px] text-gray-500 mt-1.5 px-1">Pick a saved lecture or type a new one — new names are reused as suggestions next time.</p>
             </div>
         </div>
 
@@ -243,7 +245,31 @@
 
 <script>
   // Initialize Lucide Icons
-  lucide.createIcons();
+  function safeLucide() { try { if (window.lucide) lucide.createIcons(); } catch (_) {} }
+  safeLucide();
+  function escHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function escSq(s) {
+    return String(s ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  }
+
+  // Populate lecture suggestions (saved lectures + previously used) — additive only
+  (async function loadLectureSuggestions() {
+    try {
+      const res = await fetch('/api/academic_options');
+      const data = await res.json();
+      const list = document.getElementById('lectureList');
+      if (list && data.lectures) {
+        list.innerHTML = '';
+        data.lectures.forEach(l => {
+          const o = document.createElement('option');
+          o.value = l;
+          list.appendChild(o);
+        });
+      }
+    } catch (e) { /* suggestions optional — free text still works */ }
+  })();
 
   function setAttendanceMode(isCombined) {
     const hiddenInput = document.getElementById("isCombinedClassInput");
@@ -555,8 +581,11 @@
     }, 1500);
 
     try {
+        if (window.currentStatusInterval) clearInterval(window.currentStatusInterval);
         const res = await fetch("/upload_photo", { method: "POST", body: formData });
+        if (!res.ok) throw new Error("Upload failed: HTTP " + res.status);
         const data = await res.json();
+        if (data.error) throw new Error(data.error);
 
         window.currentSessionAttendance = data.session_attendance || [];
         detectedProgram = data.detected_program || "UnknownProgram";
@@ -622,14 +651,14 @@
                   : `<span class="status-badge px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20">Absent</span>`;
                 
                 let actionBtn = isPresent
-                  ? `<button type="button" onclick="toggleStudentStatus('${row[0]}', 'Absent', '${row[5]}', this)" class="action-btn text-xs bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 px-3 py-1 rounded-lg font-semibold transition flex items-center justify-center gap-1"><i data-lucide="user-x" class="w-3.5 h-3.5"></i> Mark Absent</button>`
-                  : `<button type="button" onclick="toggleStudentStatus('${row[0]}', 'Present', '${row[5]}', this)" class="action-btn text-xs bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-3 py-1 rounded-lg font-semibold transition flex items-center justify-center gap-1"><i data-lucide="user-check" class="w-3.5 h-3.5"></i> Mark Present</button>`;
+                  ? `<button type="button" onclick="toggleStudentStatus('${escSq(row[0])}', 'Absent', '${escSq(row[5])}', this)" class="action-btn text-xs bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 px-3 py-1 rounded-lg font-semibold transition flex items-center justify-center gap-1"><i data-lucide="user-x" class="w-3.5 h-3.5"></i> Mark Absent</button>`
+                  : `<button type="button" onclick="toggleStudentStatus('${escSq(row[0])}', 'Present', '${escSq(row[5])}', this)" class="action-btn text-xs bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-3 py-1 rounded-lg font-semibold transition flex items-center justify-center gap-1"><i data-lucide="user-check" class="w-3.5 h-3.5"></i> Mark Present</button>`;
 
                 html += `
                   <tr class="border-b border-white/5 hover:bg-white/5 transition-colors">
-                    <td class="py-3 px-4 font-mono text-xs">${row[0]}</td>
-                    <td class="py-3 px-4 font-semibold text-white">${row[1]}</td>
-                    <td class="py-3 px-4 text-xs text-gray-400">${row[3]}</td>
+                    <td class="py-3 px-4 font-mono text-xs">${escHtml(row[0])}</td>
+                    <td class="py-3 px-4 font-semibold text-white">${escHtml(row[1])}</td>
+                    <td class="py-3 px-4 text-xs text-gray-400">${escHtml(row[3])}</td>
                     <td class="status-cell py-3 px-4">${statusBadge}</td>
                     <td class="action-cell py-3 px-4 flex justify-center">${actionBtn}</td>
                   </tr>
@@ -658,10 +687,14 @@
         }
 
         resultBox.innerHTML = html;
-        lucide.createIcons();
+        safeLucide();
         
         // Reset form completely on success
-        dataTransfer = new DataTransfer();
+        try {
+          dataTransfer = new DataTransfer();
+        } catch (_) {
+          dataTransfer = { files: [] };
+        }
         formFileInput.files = dataTransfer.files;
         nativeCameraInput.value = "";
         galleryInput.value = "";
@@ -675,13 +708,15 @@
 
     } catch (err) {
         console.error(err);
-        resultBox.innerHTML = `<div class="p-3 bg-red-900 border border-red-600 text-red-200 rounded text-center text-sm">Server error during analysis.</div>`;
+        resultBox.innerHTML = `<div class="p-3 bg-red-900 border border-red-600 text-red-200 rounded text-center text-sm">Server error during analysis: ${escHtml(err.message || err)}</div>`;
     } finally {
         if (window.currentStatusInterval) {
             clearInterval(window.currentStatusInterval);
         }
         // Restore submit button and re-enable it
         submitBtn.innerHTML = originalBtnHTML;
+        safeLucide();
+        submitBtn.disabled = formFileInput.files.length === 0;
         // Re-acquire wake lock if screen was briefly unlocked during processing
         if (document.visibilityState === 'visible') {
             requestScreenWakeLock();
@@ -697,36 +732,35 @@
     const tableData = window.currentSessionAttendance;
     if (!tableData || !tableData.length) return alert("No attendance to download.");
 
-    // Generate CSV string
-    let csvContent = "data:text/csv;charset=utf-8,";
-    // Header matching what backend returned
-    csvContent += "Student_ID,Name,Program,Branch,Status,Timestamp,Lecture\n";
-    
-    tableData.forEach(row => {
-        // Wrap elements in quotes to handle commas
-        let formattedRow = row.map(e => `"${e}"`).join(",");
-        csvContent += formattedRow + "\n";
-    });
+    const csvCell = (v) => {
+      let s = String(v ?? '');
+      if (/^[=+\-@]/.test(s)) s = "'" + s; // stop Excel formula injection
+      return '"' + s.replace(/"/g, '""') + '"';
+    };
+    let csv = "Student_ID,Name,Program,Branch,Status,Timestamp,Lecture\n";
+    tableData.forEach(row => { csv += row.map(csvCell).join(",") + "\n"; });
 
-    const encodedUri = encodeURI(csvContent);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-    const yearSuffix = detectedYear ? `_Batch${detectedYear}` : '';
-    
-    const filename = `Attendance_${detectedProgram}_${detectedBranch}${yearSuffix}_(${lastSubmittedLecture})_${today}.csv`;
+    const yearSuffix = detectedYear ? `_Batch${String(detectedYear).replace(/[/\\:*?"<>|]/g, '_')}` : '';
+    const safe = (s) => String(s ?? 'Unknown').replace(/[/\\:*?"<>|]/g, '_').slice(0, 60);
+    const filename = `Attendance_${safe(detectedProgram)}_${safe(detectedBranch)}${yearSuffix}_(${safe(lastSubmittedLecture)})_${today}.csv`;
 
-    link.setAttribute("href", encodedUri);
+    link.setAttribute("href", url);
     link.setAttribute("download", filename);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   async function toggleStudentStatus(studentId, newStatus, timestamp, btnElement) {
       const originalText = btnElement.innerHTML;
       btnElement.disabled = true;
       btnElement.innerHTML = `<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i>...`;
-      lucide.createIcons();
+      safeLucide();
 
       try {
           const response = await fetch('/update_attendance_status', {
@@ -739,9 +773,10 @@
                   status: newStatus
               })
           });
+          if (!response.ok) throw new Error("HTTP " + response.status);
           const result = await response.json();
           if (result.success) {
-              const row = window.currentSessionAttendance.find(r => r[0] === studentId);
+              const row = window.currentSessionAttendance.find(r => String(r[0]) === String(studentId));
               if (row) {
                   row[4] = newStatus;
               }
@@ -752,30 +787,29 @@
 
               if (newStatus === 'Present') {
                   statusCell.innerHTML = `<span class="status-badge px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Present</span>`;
-                  actionCell.innerHTML = `<button type="button" onclick="toggleStudentStatus('${studentId}', 'Absent', '${timestamp}', this)" class="action-btn text-xs bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 px-3 py-1 rounded-lg font-semibold transition flex items-center justify-center gap-1"><i data-lucide="user-x" class="w-3.5 h-3.5"></i> Mark Absent</button>`;
+                  actionCell.innerHTML = `<button type="button" onclick="toggleStudentStatus('${escSq(studentId)}', 'Absent', '${escSq(timestamp)}', this)" class="action-btn text-xs bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 px-3 py-1 rounded-lg font-semibold transition flex items-center justify-center gap-1"><i data-lucide="user-x" class="w-3.5 h-3.5"></i> Mark Absent</button>`;
               } else {
                   statusCell.innerHTML = `<span class="status-badge px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20">Absent</span>`;
-                  actionCell.innerHTML = `<button type="button" onclick="toggleStudentStatus('${studentId}', 'Present', '${timestamp}', this)" class="action-btn text-xs bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-3 py-1 rounded-lg font-semibold transition flex items-center justify-center gap-1"><i data-lucide="user-check" class="w-3.5 h-3.5"></i> Mark Present</button>`;
+                  actionCell.innerHTML = `<button type="button" onclick="toggleStudentStatus('${escSq(studentId)}', 'Present', '${escSq(timestamp)}', this)" class="action-btn text-xs bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-3 py-1 rounded-lg font-semibold transition flex items-center justify-center gap-1"><i data-lucide="user-check" class="w-3.5 h-3.5"></i> Mark Present</button>`;
               }
-              lucide.createIcons();
+              safeLucide();
           } else {
               alert("Error updating status: " + (result.error || "Unknown error"));
               btnElement.disabled = false;
               btnElement.innerHTML = originalText;
-              lucide.createIcons();
+              safeLucide();
           }
       } catch (err) {
           console.error(err);
           alert("Network error updating status.");
           btnElement.disabled = false;
           btnElement.innerHTML = originalText;
-          lucide.createIcons();
+          safeLucide();
       }
   }
 
   document.addEventListener("click", (e) => {
-    // We use closest or id depending on the click target
-    const btn = e.target.closest("#downloadCsvBtn") || e.target.id === "downloadCsvBtn" ? e.target : null;
+    const btn = e.target.closest ? e.target.closest("#downloadCsvBtn") : null;
     if (btn) {
       downloadCSV();
     }
