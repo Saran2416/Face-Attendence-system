@@ -394,10 +394,24 @@
             const acadData = await res.json();
             (acadData.programs || []).forEach(p => { if (p) programSet.add(p.toString().trim()); });
             (acadData.branches || []).forEach(b => { if (b) branchSet.add(b.toString().trim()); });
-            (acadData.years || []).forEach(y => { if (y) batchSet.add(y.toString().trim()); });
+            (acadData.batches || acadData.years || []).forEach(y => { if (y) batchSet.add(y.toString().trim()); });
             (acadData.lectures || []).forEach(l => { if (l) lectureSet.add(l.toString().trim()); });
         } catch (err) {
             console.error("Failed to read academic options:", err);
+        }
+
+        // Built-in academic fallback so filters are NEVER empty on fresh system
+        if (programSet.size === 0) {
+            ["B.Tech","M.Tech","BCA","MCA","B.Sc","M.Sc","BBA","MBA","Diploma","Ph.D"].forEach(p => programSet.add(p));
+        }
+        if (branchSet.size === 0) {
+            ["CSE","IT","ECE","EEE","ME","CE","AI & ML","Data Science","Cyber Security","Biotechnology"].forEach(b => branchSet.add(b));
+        }
+        if (batchSet.size === 0) {
+            [2026, 2025, 2024, 2023, 2022, 2021, 2020].forEach(y => batchSet.add(y.toString()));
+        }
+        if (lectureSet.size === 0) {
+            ["Mathematics","Physics","Programming in C","Data Structures","DBMS","Operating Systems","Computer Networks","Machine Learning","General Session"].forEach(l => lectureSet.add(l));
         }
 
         // Add options found in logs and registered students

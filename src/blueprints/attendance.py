@@ -665,7 +665,40 @@ def get_academic_options():
             stus = students_resp.data or []
         except Exception:
             stus = []
-        years = sorted(list({extract_student_year(s) for s in stus if extract_student_year(s) is not None}), reverse=True)
+
+        # Batches / Years: from academic_structure + students + persistent custom batches + defaults
+        stored_batches = [r.get('value') for r in rows if r.get('type') == 'batch' and r.get('value')]
+        student_years = [extract_student_year(s) for s in stus if extract_student_year(s) is not None]
+        
+        all_batch_candidates = set()
+        for b in stored_batches:
+            if b:
+                try:
+                    all_batch_candidates.add(int(b))
+                except ValueError:
+                    all_batch_candidates.add(str(b).strip())
+        for sy in student_years:
+            if sy:
+                all_batch_candidates.add(int(sy))
+
+        try:
+            from src.utils.academic_defaults import DEFAULT_BATCHES, get_saved_batches
+            for b in get_saved_batches():
+                try:
+                    all_batch_candidates.add(int(b))
+                except ValueError:
+                    all_batch_candidates.add(str(b).strip())
+        except Exception:
+            for b in [2026, 2025, 2024, 2023, 2022, 2021, 2020]:
+                all_batch_candidates.add(b)
+
+        def _sort_batch(val):
+            try:
+                return (0, int(val))
+            except ValueError:
+                return (1, str(val))
+
+        years = sorted(list(all_batch_candidates), key=_sort_batch, reverse=True)
 
         # Fallback: derive programs/branches from student rows when lookup table is empty
         if not programs:
@@ -714,6 +747,7 @@ def get_academic_options():
             "programs": programs,
             "branches": branches,
             "years": years,
+            "batches": years,
             "lectures": lectures,
         })
     except Exception as e:
@@ -723,6 +757,7 @@ def get_academic_options():
             "programs": [],
             "branches": [],
             "years": [],
+            "batches": [],
             "lectures": [],
         })
 

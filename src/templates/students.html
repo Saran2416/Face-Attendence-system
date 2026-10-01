@@ -233,6 +233,46 @@
               }
             });
           });
+
+          // Also populate master academic options (programs, branches, batches)
+          fetch('/api/academic_options')
+            .then(res => res.json())
+            .then(data => {
+              const pSel = $('#filterProgram');
+              const bSel = $('#filterBranch');
+              const ySel = $('#filterYear');
+              
+              const existingProg = new Set();
+              pSel.find('option').each(function() { if ($(this).val()) existingProg.add($(this).val().toUpperCase()); });
+              (data.programs || []).forEach(p => {
+                const u = p.toString().trim().toUpperCase();
+                if (u && !existingProg.has(u)) {
+                  existingProg.add(u);
+                  pSel.append('<option value="' + u + '">' + u + '</option>');
+                }
+              });
+
+              const existingBran = new Set();
+              bSel.find('option').each(function() { if ($(this).val()) existingBran.add($(this).val().toUpperCase()); });
+              (data.branches || []).forEach(b => {
+                const u = b.toString().trim().toUpperCase();
+                if (u && !existingBran.has(u)) {
+                  existingBran.add(u);
+                  bSel.append('<option value="' + u + '">' + u + '</option>');
+                }
+              });
+
+              const existingYear = new Set();
+              ySel.find('option').each(function() { if ($(this).val()) existingYear.add($(this).val().toUpperCase()); });
+              (data.batches || data.years || []).forEach(y => {
+                const u = y.toString().trim().toUpperCase();
+                if (u && !existingYear.has(u)) {
+                  existingYear.add(u);
+                  ySel.append('<option value="' + u + '">' + u + '</option>');
+                }
+              });
+            })
+            .catch(() => {});
         }
       });
     });

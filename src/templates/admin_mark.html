@@ -185,18 +185,6 @@
     lucide.createIcons();
 
     document.addEventListener('DOMContentLoaded', () => {
-        // Lecture suggestions (saved + previously used lectures)
-        fetch('/api/academic_options').then(r => r.json()).then(d => {
-          const list = document.getElementById('lectureList');
-          if (list && d.lectures) {
-            d.lectures.forEach(l => {
-              const o = document.createElement('option');
-              o.value = l;
-              list.appendChild(o);
-            });
-          }
-        }).catch(() => {});
-
         const programs = new Set();
         const branches = new Set();
         const years = new Set();
@@ -211,19 +199,55 @@
         });
         
         const progSelect = document.getElementById('filterProgram');
+        const branSelect = document.getElementById('filterBranch');
+        const yrSelect = document.getElementById('filterYear');
+
         Array.from(programs).sort().forEach(p => {
             progSelect.add(new Option(p, p));
         });
-        
-        const branSelect = document.getElementById('filterBranch');
         Array.from(branches).sort().forEach(b => {
             branSelect.add(new Option(b, b));
         });
-        
-        const yrSelect = document.getElementById('filterYear');
         Array.from(years).sort().forEach(y => {
             yrSelect.add(new Option(y, y));
         });
+
+        // Academic suggestions & complete filter lists (programs, branches, batches, lectures)
+        fetch('/api/academic_options').then(r => r.json()).then(d => {
+          const list = document.getElementById('lectureList');
+          if (list && d.lectures) {
+            list.innerHTML = '';
+            d.lectures.forEach(l => {
+              const o = document.createElement('option');
+              o.value = l;
+              list.appendChild(o);
+            });
+          }
+
+          (d.programs || []).forEach(p => programs.add(p.toString().trim().toUpperCase()));
+          (d.branches || []).forEach(b => branches.add(b.toString().trim().toUpperCase()));
+          (d.batches || d.years || []).forEach(y => years.add(y.toString().trim().toUpperCase()));
+
+          const curP = progSelect.value;
+          progSelect.innerHTML = '<option value="">All Programs</option>';
+          Array.from(programs).sort().forEach(p => progSelect.add(new Option(p, p)));
+          if (curP) progSelect.value = curP;
+
+          const curB = branSelect.value;
+          branSelect.innerHTML = '<option value="">All Branches</option>';
+          Array.from(branches).sort().forEach(b => branSelect.add(new Option(b, b)));
+          if (curB) branSelect.value = curB;
+
+          const curY = yrSelect.value;
+          yrSelect.innerHTML = '<option value="">All Years</option>';
+          const sortedYears = Array.from(years).sort((a, b) => {
+            const numA = parseInt(a), numB = parseInt(b);
+            if (!isNaN(numA) && !isNaN(numB)) return numB - numA;
+            return a.localeCompare(b);
+          });
+          sortedYears.forEach(y => yrSelect.add(new Option(y, y)));
+          if (curY) yrSelect.value = curY;
+        }).catch(() => {});
     });
 
     function filterStudents() {

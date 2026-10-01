@@ -127,6 +127,7 @@ def admin_edit_student(student_id):
         name    = request.form.get('name', '').strip()
         program = request.form.get('program', '').strip()
         branch  = request.form.get('branch', '').strip()
+        enrollment_year = request.form.get('enrollment_year', '').strip()
         gmail   = request.form.get('gmail', '').strip()
         photo   = request.files.get('photo')
 
@@ -141,6 +142,11 @@ def admin_edit_student(student_id):
             'branch': branch,
             'gmail': gmail
         }
+        if enrollment_year:
+            try:
+                update_payload['enrollment_year'] = int(enrollment_year)
+            except ValueError:
+                pass
 
         # If a new re-enrollment photo is provided, encode it and reset EWMA
         if photo and photo.filename:
@@ -492,11 +498,12 @@ def admin_academics():
 
     if request.method == 'POST':
         action = request.form.get('action')
-        item_type = request.form.get('type')  # program, branch, lecture
+        item_type = request.form.get('type')  # program, branch, lecture, batch
         item_value = request.form.get('value', '').strip()
 
         from src.utils.academic_defaults import (
-            ALLOWED_ACADEMIC_TYPES, DEFAULT_BRANCHES, DEFAULT_LECTURES, DEFAULT_PROGRAMS,
+            ALLOWED_ACADEMIC_TYPES, DEFAULT_BRANCHES, DEFAULT_LECTURES, DEFAULT_PROGRAMS, DEFAULT_BATCHES,
+            get_saved_batches, save_custom_batch, delete_custom_batch
         )
 
         if action == 'seed_defaults':
@@ -511,6 +518,12 @@ def admin_academics():
                 for lec in DEFAULT_LECTURES:
                     supabase.table('academic_structure').upsert(
                         {'type': 'lecture', 'value': lec}, on_conflict='type,value').execute()
+                for yr in DEFAULT_BATCHES:
+                    try:
+                        supabase.table('academic_structure').upsert(
+                            {'type': 'batch', 'value': str(yr)}, on_conflict='type,value').execute()
+                    except Exception:
+                        save_custom_batch(str(yr))
             except Exception as e:
                 print("Error seeding academic defaults:", e)
             return redirect(url_for('admin.admin_academics'))
@@ -518,22 +531,38 @@ def admin_academics():
         if action == 'add' and item_type and item_value:
             if item_type not in ALLOWED_ACADEMIC_TYPES:
                 return redirect(url_for('admin.admin_academics'))
-            try:
-                supabase.table('academic_structure').upsert({
-                    'type': item_type,
-                    'value': item_value
-                }, on_conflict='type,value').execute()
-            except Exception as e:
-                print("Error adding academic item:", e)
+            if item_type == 'batch':
+                try:
+                    supabase.table('academic_structure').upsert({
+                        'type': 'batch',
+                        'value': item_value
+                    }, on_conflict='type,value').execute()
+                except Exception:
+                    pass
+                save_custom_batch(item_value)
+            else:
+                try:
+                    supabase.table('academic_structure').upsert({
+                        'type': item_type,
+                        'value': item_value
+                    }, on_conflict='type,value').execute()
+                except Exception as e:
+                    print("Error adding academic item:", e)
 
         elif action == 'delete' and item_type and item_value:
             if item_type not in ALLOWED_ACADEMIC_TYPES:
                 return redirect(url_for('admin.admin_academics'))
-            try:
-                # First delete matching rows from academic_structure table
-                supabase.table('academic_structure').delete().eq('type', item_type).eq('value', item_value).execute()
-            except Exception as e:
-                print("Error deleting academic item from academic_structure:", e)
+            if item_type == 'batch':
+                try:
+                    supabase.table('academic_structure').delete().eq('type', 'batch').eq('value', item_value).execute()
+                except Exception:
+                    pass
+                delete_custom_batch(item_value)
+            else:
+                try:
+                    supabase.table('academic_structure').delete().eq('type', item_type).eq('value', item_value).execute()
+                except Exception as e:
+                    print("Error deleting academic item from academic_structure:", e)
 
         return redirect(url_for('admin.admin_academics'))
 
@@ -547,29 +576,55 @@ def admin_academics():
     programs = sorted(list({r['value'] for r in rows if r.get('type') == 'program' and r.get('value')}))
     branches = sorted(list({r['value'] for r in rows if r.get('type') == 'branch' and r.get('value')}))
     lectures = sorted(list({r['value'] for r in rows if r.get('type') == 'lecture' and r.get('value')}))
+    stored_batches = [r['value'] for r in rows if r.get('type') == 'batch' and r.get('value')]
+
+    from src.utils.academic_defaults import (
+        DEFAULT_BRANCHES, DEFAULT_LECTURES, DEFAULT_PROGRAMS, DEFAULT_BATCHES, get_saved_batches
+    )
+
+    # Batches / Years: union of DB batches + saved custom batches + student enrollment years + defaults
+    batch_candidates = set()
+    for b in stored_batches:
+        if b:
+            batch_candidates.add(str(b).strip())
+    try:
+        students_resp = supabase.table('students').select('enrollment_year').execute()
+        for s in (students_resp.data or []):
+            ey = s.get('enrollment_year')
+            if ey:
+                batch_candidates.add(str(ey).strip())
+    except Exception:
+        pass
+    for b in get_saved_batches():
+        if b:
+            batch_candidates.add(str(b).strip())
+    for b in DEFAULT_BATCHES:
+        if b:
+            batch_candidates.add(str(b).strip())
+
+    def _sort_batch_key(v):
+        try:
+            return (0, int(v))
+        except ValueError:
+            return (1, str(v))
+
+    batches_for_display = sorted(list(batch_candidates), key=_sort_batch_key, reverse=True)
 
     # Fallback so the page never renders completely empty on a fresh DB
-    if not programs or not branches or not lectures:
-        try:
-            from src.utils.academic_defaults import DEFAULT_BRANCHES, DEFAULT_LECTURES, DEFAULT_PROGRAMS
-            show_defaults_hint = True
-            programs_for_display = programs or list(DEFAULT_PROGRAMS)
-            branches_for_display = branches or list(DEFAULT_BRANCHES)
-            lectures_for_display = lectures or list(DEFAULT_LECTURES)
-        except Exception:
-            show_defaults_hint = False
-            programs_for_display, branches_for_display, lectures_for_display = programs, branches, lectures
-    else:
-        show_defaults_hint = False
-        programs_for_display, branches_for_display, lectures_for_display = programs, branches, lectures
+    show_defaults_hint = not programs or not branches or not lectures
+    programs_for_display = programs or list(DEFAULT_PROGRAMS)
+    branches_for_display = branches or list(DEFAULT_BRANCHES)
+    lectures_for_display = lectures or list(DEFAULT_LECTURES)
 
     return render_template(
         'admin_academics.html',
-        programs=programs,
-        branches=branches,
-        lectures=lectures,
+        programs=programs_for_display,
+        branches=branches_for_display,
+        batches=batches_for_display,
+        lectures=lectures_for_display,
         programs_display=programs_for_display,
         branches_display=branches_for_display,
+        batches_display=batches_for_display,
         lectures_display=lectures_for_display,
         show_defaults_hint=show_defaults_hint,
     )

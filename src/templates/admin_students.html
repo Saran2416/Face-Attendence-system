@@ -219,6 +219,42 @@
         Array.from(years).sort().forEach(y => {
             yrSelect.add(new Option(y, y));
         });
+
+        // Also fetch complete master academic list (programs, branches, batches)
+        fetch('/api/academic_options')
+          .then(res => res.json())
+          .then(data => {
+            (data.programs || []).forEach(p => programs.add(p.toString().trim().toUpperCase()));
+            (data.branches || []).forEach(b => branches.add(b.toString().trim().toUpperCase()));
+            (data.batches || data.years || []).forEach(y => years.add(y.toString().trim().toUpperCase()));
+
+            const currentProg = progSelect.value;
+            progSelect.innerHTML = '<option value="">All Programs</option>';
+            Array.from(programs).sort().forEach(p => {
+              progSelect.add(new Option(p, p));
+            });
+            if (currentProg) progSelect.value = currentProg;
+
+            const currentBran = branSelect.value;
+            branSelect.innerHTML = '<option value="">All Branches</option>';
+            Array.from(branches).sort().forEach(b => {
+              branSelect.add(new Option(b, b));
+            });
+            if (currentBran) branSelect.value = currentBran;
+
+            const currentYr = yrSelect.value;
+            yrSelect.innerHTML = '<option value="">All Years</option>';
+            const sortedYears = Array.from(years).sort((a, b) => {
+              const numA = parseInt(a), numB = parseInt(b);
+              if (!isNaN(numA) && !isNaN(numB)) return numB - numA;
+              return a.localeCompare(b);
+            });
+            sortedYears.forEach(y => {
+              yrSelect.add(new Option(y, y));
+            });
+            if (currentYr) yrSelect.value = currentYr;
+          })
+          .catch(() => {});
     });
 
     function filterStudents() {
