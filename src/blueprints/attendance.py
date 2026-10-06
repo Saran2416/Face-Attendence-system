@@ -326,20 +326,40 @@ def upload_photo():
                 match = batch_matches[idx]
 
                 # Fallback to Supabase RPC if in-memory match returned None
+                # (e.g. cache was empty because the server just restarted).
                 if not match:
                     new_emb = face_embeddings[idx]
                     embedding = normalize_embedding(new_emb)
                     if embedding is not None:
                         try:
-                            rpc_params = {
-                                'query_embedding': embedding.tolist(),
-                                'match_threshold': config.FACE_MATCH_THRESHOLD,
-                                'filter_program': None,
-                                'filter_branch': None,
-                                'filter_section': None
-                            }
-                            match_resp = supabase_admin.rpc('match_face', rpc_params).execute()
-                            if match_resp.data:
+                            match_resp = None
+                            # Try the extended signature first, then the
+                            # minimal (query_embedding, match_threshold)
+                            # signature kept in docs/database.md.
+                            for rpc_params in (
+                                {
+                                    'query_embedding': embedding.tolist(),
+                                    'match_threshold': config.FACE_MATCH_THRESHOLD,
+                                    'filter_program': None,
+                                    'filter_branch': None,
+                                    'filter_section': None,
+                                },
+                                {
+                                    'query_embedding': embedding.tolist(),
+                                    'match_threshold': config.FACE_MATCH_THRESHOLD,
+                                },
+                            ):
+                                try:
+                                    match_resp = supabase_admin.rpc('match_face', rpc_params).execute()
+                                    break
+                                except Exception as rpc_err:
+                                    # 'PGRST202 / Could not find function' means
+                                    # the DB only has the other overload.
+                                    err_text = str(rpc_err)
+                                    if 'match_face' in err_text or 'PGRST' in err_text:
+                                        continue
+                                    raise
+                            if match_resp is not None and match_resp.data:
                                 best_m = match_resp.data[0]
                                 match = {
                                     'id': best_m['id'],

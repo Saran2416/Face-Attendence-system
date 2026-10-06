@@ -25,6 +25,88 @@ _embeddings_matrix: Optional[np.ndarray] = None  # Shape: (M, 512)
 _is_initialized: bool = False
 
 
+def _parse_embedding(raw: Any) -> Optional[np.ndarray]:
+    """
+    Parse a 512D embedding returned by Supabase/PostgREST into a float32 array.
+
+    pgvector ``VECTOR(512)`` columns are returned as a *string* like
+    ``"[0.01,0.02,...]"`` — NOT as a JSON list. The previous code called
+    ``np.array(raw, dtype=np.float32)`` directly, which raises
+    ``ValueError`` for strings, so *every* row was skipped after a server
+    restart (cache stayed empty → everyone matched as "Unknown").
+    Only freshly-added students worked because they were appended to the
+    in-memory matrix directly via :func:`add_student_to_cache`.
+
+    This helper accepts all formats we may encounter:
+      * list / tuple of numbers  → direct conversion
+      * numpy array              → direct conversion
+      * str / bytes              → pgvector ``"[f1,f2,...]"`` text,
+                                    JSON array text, or bare comma/space
+                                    separated floats, with or without
+                                    surrounding ``[]`` / ``()`` / ``{}``
+      * anything else            → None
+    Returns a ``(512,)`` float32 array, or ``None`` if unparseable.
+    """
+    if raw is None:
+        return None
+
+    # bytes → decode then re-parse as str
+    if isinstance(raw, (bytes, bytearray)):
+        try:
+            raw = bytes(raw).decode("utf-8", errors="strict")
+        except Exception:
+            return None
+
+    # numpy array → fast path
+    if isinstance(raw, np.ndarray):
+        try:
+            arr = raw.astype(np.float32, copy=False).reshape(-1)
+            return arr if arr.shape == (512,) else None
+        except Exception:
+            return None
+
+    # list / tuple → fast path
+    if isinstance(raw, (list, tuple)):
+        try:
+            arr = np.array(raw, dtype=np.float32).reshape(-1)
+            return arr if arr.shape == (512,) else None
+        except Exception:
+            return None
+
+    # string → pgvector / JSON / CSV text
+    if isinstance(raw, str):
+        s = raw.strip()
+        if not s:
+            return None
+        # 1) Try JSON first — pgvector "[0.1,0.2,...]" is valid JSON.
+        try:
+            import json as _json
+            parsed = _json.loads(s)
+            if isinstance(parsed, (list, tuple)):
+                arr = np.array(parsed, dtype=np.float32).reshape(-1)
+                if arr.shape == (512,):
+                    return arr
+        except Exception:
+            pass
+        # 2) Manual fallback: strip brackets/parens/braces, split on
+        #    commas and/or whitespace.
+        try:
+            s_clean = s.strip().lstrip("[({").rstrip("]})")
+            if not s_clean.strip():
+                return None
+            # Normalise separators to commas, then split.
+            import re as _re
+            parts = [p for p in _re.split(r"[\s,;]+", s_clean.strip()) if p]
+            if len(parts) != 512:
+                return None
+            arr = np.array(parts, dtype=np.float32).reshape(-1)
+            return arr if arr.shape == (512,) else None
+        except Exception:
+            return None
+
+    return None
+
+
 def reload_face_cache() -> int:
     """
     Fetch all student records and 512D embeddings from Supabase
@@ -43,19 +125,56 @@ def reload_face_cache() -> int:
             new_ids: List[str] = []
             new_meta: Dict[str, Dict[str, Any]] = {}
             emb_list: List[np.ndarray] = []
+            skipped = 0
+
+            if rows:
+                # Diagnostic: log the Python type Supabase returned so future
+                # format changes are visible in server logs.
+                try:
+                    sample = (rows[0] or {}).get('embedding')
+                    logger.info(
+                        "Face cache reload: %d rows from Supabase "
+                        "(sample embedding type: %s).",
+                        len(rows), type(sample).__name__,
+                    )
+                except Exception:
+                    pass
 
             for r in rows:
                 sid = r.get('id')
                 raw_emb = r.get('embedding')
-                if not sid or not raw_emb:
+                if not sid:
+                    skipped += 1
+                    continue
+                if raw_emb is None:
+                    skipped += 1
+                    continue
+                if isinstance(raw_emb, str) and not raw_emb.strip():
+                    skipped += 1
                     continue
 
                 try:
-                    emb_arr = np.array(raw_emb, dtype=np.float32)
+                    emb_arr = _parse_embedding(raw_emb)
+                    if emb_arr is None:
+                        skipped += 1
+                        logger.warning(
+                            "Skipping invalid embedding for student %s: "
+                            "unparseable %s value.", sid, type(raw_emb).__name__,
+                        )
+                        continue
                     if emb_arr.shape != (512,):
+                        skipped += 1
+                        logger.warning(
+                            "Skipping invalid embedding for student %s: "
+                            "expected shape (512,), got %s.", sid, emb_arr.shape,
+                        )
                         continue
                     norm_emb = normalize_embedding(emb_arr)
                     if norm_emb is None:
+                        skipped += 1
+                        logger.warning(
+                            "Skipping invalid embedding for student %s: zero norm.", sid,
+                        )
                         continue
                     
                     sid_clean = str(sid).strip()
@@ -77,13 +196,19 @@ def reload_face_cache() -> int:
                 _student_ids = new_ids
                 _student_metadata = new_meta
                 _is_initialized = True
-                logger.info("Face cache reloaded successfully: %d students in matrix memory.", len(_student_ids))
+                logger.info(
+                    "Face cache reloaded successfully: %d students in matrix memory (%d skipped).",
+                    len(_student_ids), skipped,
+                )
             else:
                 _embeddings_matrix = None
                 _student_ids = []
                 _student_metadata = {}
                 _is_initialized = True
-                logger.warning("Face cache reloaded: 0 valid student embeddings found.")
+                logger.warning(
+                    "Face cache reloaded: 0 valid student embeddings found (%d rows read, %d skipped).",
+                    len(rows), skipped,
+                )
 
             return len(_student_ids)
         except Exception as e:
@@ -92,9 +217,33 @@ def reload_face_cache() -> int:
 
 
 def ensure_cache_initialized():
-    """Ensure the cache has been loaded at least once."""
-    if not _is_initialized:
-        reload_face_cache()
+    """Ensure the cache has been loaded at least once.
+
+    Self-healing: if a previous load left the cache empty (e.g. transient
+    DB failure or the pre-fix string-parsing bug) the next recognition
+    request retries the reload instead of returning "Unknown" forever.
+    When the database genuinely has zero students this costs one extra
+    SELECT per request cycle at most — negligible for this workload.
+    """
+    if not _is_initialized or _embeddings_matrix is None:
+        # Avoid stampeding the DB: only one thread reloads at a time
+        # (reload_face_cache itself holds _cache_lock).
+        needs_reload = False
+        with _cache_lock:
+            needs_reload = (not _is_initialized) or (_embeddings_matrix is None)
+        if needs_reload:
+            reload_face_cache()
+
+
+def get_cache_stats() -> Dict[str, Any]:
+    """Return a small diagnostic snapshot of the face cache state."""
+    with _cache_lock:
+        return {
+            "initialized": _is_initialized,
+            "count": len(_student_ids),
+            "matrix_shape": list(_embeddings_matrix.shape) if _embeddings_matrix is not None else None,
+            "ids": list(_student_ids),
+        }
 
 
 def match_faces_batch(
