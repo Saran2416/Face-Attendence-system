@@ -13,6 +13,8 @@ is empty or unreachable, and are offered via the
 DEFAULT_PROGRAMS = [
     "B.Tech",
     "M.Tech",
+    "B.E",
+    "M.E",
     "BCA",
     "MCA",
     "B.Sc",
@@ -30,6 +32,7 @@ DEFAULT_BRANCHES = [
     "EEE",
     "ME",
     "CE",
+    "AI&DS",
     "AI & ML",
     "Data Science",
     "Cyber Security",
