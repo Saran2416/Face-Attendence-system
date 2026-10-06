@@ -113,3 +113,21 @@ DRIFT_ALERT_THRESHOLD=0.35      # ALERT state cutoff (Triggers Re-Enroll Prompt)
    ```
    Access the web app at `http://localhost:5000`.
 
+---
+
+## ☁️ Deployment Notes
+
+### Vercel
+
+Use the Flask framework preset with the project root set to `./`, no build command, output directory `N/A`, and install command `pip install -r requirements.txt`. Configure `FLASK_SECRET_KEY`, `SUPABASE_URL`, and `SUPABASE_SERVICE_ROLE_KEY` in the Vercel environment settings; add `SUPABASE_ANON_KEY` if used. Keep secrets out of Git.
+
+Vercel limits each serverless function bundle to 500 MB. InsightFace's `buffalo_l` model has extracted ONNX files plus a redundant ZIP download archive. After model preparation, `src/utils/face.py` removes that archive to reduce the deployment bundle; the extracted model files remain available. If those extracted files are removed, InsightFace downloads the archive again. This may not be enough to fit every deployment, and model inference can still be constrained by serverless memory and execution limits.
+
+For a persistent Python host or VPS, install dependencies with `pip install -r requirements.txt` and start the app with:
+
+```bash
+gunicorn wsgi:app --config gunicorn.conf.py
+```
+
+See the [production deployment guide](docs/deployment.md) for Gunicorn, Nginx, and systemd configuration.
+

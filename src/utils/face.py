@@ -7,6 +7,7 @@ Migrated to pgvector. This module now only handles the InsightFace model loading
 import logging
 import insightface
 import numpy as np
+from pathlib import Path
 
 from src import config
 
@@ -23,6 +24,12 @@ try:
 except Exception as e:
     logger.warning(f"Failed to initialize InsightFace with ctx_id={config.INSIGHTFACE_CTX_ID} ({e}). Falling back to CPU (ctx_id=-1).")
     model.prepare(ctx_id=-1)
+
+model_archive = Path.home() / ".insightface" / "models" / "buffalo_l.zip"
+try:
+    model_archive.unlink(missing_ok=True)
+except OSError as e:
+    logger.warning("Could not remove cached InsightFace archive %s: %s", model_archive, e)
 
 def normalize_embedding(arr: np.ndarray) -> np.ndarray | None:
     """Return an L2-normalised copy of *arr*, or ``None`` if the norm is zero."""
